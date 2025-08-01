@@ -33,7 +33,7 @@ void Scene_Clear(CHScene* lpScene)
 
 CH_CORE_DLL_API
 BOOL Scene_Load(CHScene** lpScene,
-    char* lpName,
+    const char* lpName,
     DWORD dwIndex)
 {
     FILE* file = fopen(lpName, "rb");
@@ -403,7 +403,7 @@ BOOL Scene_Draw(CHScene* lpScene)
     worldMatrix = XMMatrixMultiply(worldMatrix, lpScene->matrix);
 
     // Update constant buffer for shaders
-    CHInternal::g_ShaderManager.UpdateConstantBuffer(worldMatrix, g_ViewMatrix, g_ProjectMatrix);
+            CHInternal::g_CompatibilityShaderManager.UpdateConstantBuffer(worldMatrix, g_ViewMatrix, g_ProjectMatrix);
 
     // Render the scene
     HRESULT hr = CHSceneInternal::RenderScene(lpScene);
@@ -533,7 +533,7 @@ namespace CHSceneInternal {
         g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         // Set default shaders
-        CHInternal::g_ShaderManager.SetDefaultShaders();
+        CHInternal::g_CompatibilityShaderManager.SetDefaultShaders();
 
         // Draw (matching original DrawIndexedPrimitive)
         g_D3DContext->DrawIndexed(scene->dwTriCount * 3, 0, 0);

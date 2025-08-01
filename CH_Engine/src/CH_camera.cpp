@@ -20,7 +20,7 @@ void Camera_Clear(CHCamera* lpCamera)
 
 CH_CORE_DLL_API
 BOOL Camera_Load(CHCamera** lpCamera,
-                char* lpName,
+                const char* lpName,
                 DWORD dwIndex)
 {
     FILE* file = fopen(lpName, "rb");
@@ -223,7 +223,7 @@ BOOL Camera_BuildView(CHCamera* lpCamera, BOOL bSet)
     if (bSet)
     {
         // Update shader constant buffer with new view matrix
-        CHInternal::g_ShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
+        CHInternal::g_CompatibilityShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
     }
     
     return TRUE;
@@ -245,7 +245,7 @@ BOOL Camera_BuildProject(CHCamera* lpCamera, BOOL bSet)
     if (bSet)
     {
         // Update shader constant buffer with new projection matrix
-        CHInternal::g_ShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
+        CHInternal::g_CompatibilityShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
     }
     
     return TRUE;
@@ -269,7 +269,7 @@ BOOL Camera_BuildOrtho(CHCamera* lpCamera,
     if (bSet)
     {
         // Update shader constant buffer with new projection matrix
-        CHInternal::g_ShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
+        CHInternal::g_CompatibilityShaderManager.UpdateConstantBuffer(XMMatrixIdentity(), g_ViewMatrix, g_ProjectMatrix);
     }
     
     return TRUE;

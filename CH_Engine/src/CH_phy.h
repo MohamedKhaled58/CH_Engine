@@ -205,10 +205,11 @@ namespace CHPhyInternal {
     class PhyShaderManager {
     private:
         CHComPtr<ID3D11VertexShader> m_skeletalVertexShader;
+        CHComPtr<ID3D11PixelShader> m_skeletalPixelShader;
         CHComPtr<ID3D11PixelShader> m_normalPixelShader;
         CHComPtr<ID3D11PixelShader> m_alphaPixelShader;
-        CHComPtr<ID3D11InputLayout> m_phyInputLayout;
-        CHComPtr<ID3D11Buffer> m_boneConstantBuffer;
+        CHComPtr<ID3D11InputLayout> m_skeletalInputLayout;
+        CHComPtr<ID3D11Buffer> m_boneMatrixBuffer;
         
     public:
         BOOL Initialize();

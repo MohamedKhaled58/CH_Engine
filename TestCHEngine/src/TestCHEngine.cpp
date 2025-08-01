@@ -12,6 +12,13 @@
 #include "CH_texture.h"
 #include <CH_datafile.h>
 
+// Global variables for camera control
+float g_CameraDistance = 10.0f;
+float g_CameraAngleX = 0.0f;
+float g_CameraAngleY = 0.0f;
+bool g_SceneLoaded = false;
+bool g_ShowInfo = true;
+
 // Window procedure
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -21,8 +28,55 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
         PostQuitMessage(0);
         return 0;
     case WM_KEYDOWN:
-        if (wParam == VK_ESCAPE)
+        switch (wParam)
+        {
+        case VK_ESCAPE:
             PostQuitMessage(0);
+            return 0;
+        case VK_F1:
+            g_ShowInfo = !g_ShowInfo;
+            return 0;
+        case VK_UP:
+            g_CameraAngleX += 0.1f;
+            return 0;
+        case VK_DOWN:
+            g_CameraAngleX -= 0.1f;
+            return 0;
+        case VK_LEFT:
+            g_CameraAngleY -= 0.1f;
+            return 0;
+        case VK_RIGHT:
+            g_CameraAngleY += 0.1f;
+            return 0;
+        case VK_ADD:
+        case VK_OEM_PLUS:
+            g_CameraDistance -= 1.0f;
+            if (g_CameraDistance < 1.0f) g_CameraDistance = 1.0f;
+            return 0;
+        case VK_SUBTRACT:
+        case VK_OEM_MINUS:
+            g_CameraDistance += 1.0f;
+            if (g_CameraDistance > 100.0f) g_CameraDistance = 100.0f;
+            return 0;
+        case 'R':
+        case 'r':
+            // Reset camera
+            g_CameraDistance = 10.0f;
+            g_CameraAngleX = 0.0f;
+            g_CameraAngleY = 0.0f;
+            return 0;
+        }
+        return 0;
+    case WM_MOUSEWHEEL:
+        {
+            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            if (delta > 0)
+                g_CameraDistance -= 1.0f;
+            else
+                g_CameraDistance += 1.0f;
+            if (g_CameraDistance < 1.0f) g_CameraDistance = 1.0f;
+            if (g_CameraDistance > 100.0f) g_CameraDistance = 100.0f;
+        }
         return 0;
     }
     return DefWindowProc(hWnd, message, wParam, lParam);
@@ -31,7 +85,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     // Initialize the CH Engine
-    int result = Init3D(hInstance, "CH Engine Test", 1024, 768, TRUE, WindowProc, 2);
+    int result = Init3D(hInstance, "CH Engine Scene Test", 1280, 720, TRUE, WindowProc, 2);
 
     if (result <= 0)
     {
@@ -52,28 +106,66 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         Sprite_SetColor(testSprite, 255, 255, 255, 255);
     }
 
-    // Try to load a test scene
-    if (!Scene_Load(&testScene, "test.scene", 0))
+    // Try to load the test scene with detailed error reporting
+    printf("Attempting to load test.scene...\n");
+    if (Scene_Load(&testScene, "test.scene", 0))
     {
-        // Scene loading failed, that's OK for testing
+        g_SceneLoaded = true;
+        printf("✓ Scene loaded successfully!\n");
+        
+        // Try to get scene information if available
+        if (testScene)
+        {
+            printf("Scene pointer: %p\n", testScene);
+            // Note: Scene structure details would depend on CHScene definition
+        }
+    }
+    else
+    {
+        g_SceneLoaded = false;
+        printf("✗ Scene loading failed!\n");
         testScene = nullptr;
     }
 
-    // Create a test camera
+    // Create a test camera with better positioning
     if (!Camera_Load(&testCamera, "test.cam", 0))
     {
         // Create default camera if loading fails
         testCamera = new CHCamera;
         Camera_Clear(testCamera);
-        testCamera->fNear = 1.0f;
+        testCamera->fNear = 0.1f;
         testCamera->fFar = 1000.0f;
-        testCamera->fFov = CHCameraMath::ToRadian(45.0f);
+        testCamera->fFov = CHCameraMath::ToRadian(60.0f);
+        
+        // Set initial camera position using the animation arrays
+        if (testCamera->lpFrom && testCamera->lpTo)
+        {
+            // Set initial position
+            testCamera->lpFrom[0] = XMVectorSet(0.0f, 2.0f, g_CameraDistance, 1.0f);
+            testCamera->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        
+        printf("✓ Created default camera\n");
+    }
+    else
+    {
+        printf("✓ Camera loaded from test.cam\n");
     }
 
     // Main loop
     MSG msg = {};
     DWORD frameCount = 0;
     DWORD lastTime = GetTickCount64();
+    DWORD lastFPSUpdate = 0;
+    DWORD currentFPS = 0;
+
+    printf("Engine test started. Controls:\n");
+    printf("- Arrow keys: Rotate camera\n");
+    printf("- +/- keys: Zoom in/out\n");
+    printf("- Mouse wheel: Zoom in/out\n");
+    printf("- R key: Reset camera\n");
+    printf("- F1 key: Toggle info display\n");
+    printf("- ESC key: Exit\n");
 
     while (msg.message != WM_QUIT)
     {
@@ -87,11 +179,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             // Limit frame rate
             if (LimitRate(16)) // ~60 FPS
             {
+                // Update camera position based on controls
+                if (testCamera && testCamera->lpFrom && testCamera->lpTo)
+                {
+                    // Calculate camera position based on spherical coordinates
+                    float x = g_CameraDistance * sinf(g_CameraAngleY) * cosf(g_CameraAngleX);
+                    float y = g_CameraDistance * sinf(g_CameraAngleX);
+                    float z = g_CameraDistance * cosf(g_CameraAngleY) * cosf(g_CameraAngleX);
+                    
+                    // Update camera position
+                    testCamera->lpFrom[0] = XMVectorSet(x, y + 2.0f, z, 1.0f);
+                    testCamera->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+                }
+
                 // Begin rendering
                 if (Begin3D())
                 {
                     // Clear the screen
-                    ClearBuffer(TRUE, TRUE, 0xFF000040); // Dark blue background
+                    ClearBuffer(TRUE, TRUE, 0xFF000020); // Dark blue background
 
                     // Build camera matrices
                     if (testCamera)
@@ -101,34 +206,37 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     }
 
                     // Draw 3D scene if available
-                    if (testScene)
+                    if (testScene && g_SceneLoaded)
                     {
                         Scene_Prepare();
                         Scene_Draw(testScene);
                         Scene_NextFrame(testScene, 1);
                     }
 
-                    // Draw 2D sprite if available
+                    // Draw 2D sprite if available (as overlay)
                     if (testSprite)
                     {
                         Sprite_Prepare();
                         Sprite_Draw(testSprite, 0); // Normal blending
                     }
 
-                    // Draw frame rate
-                    DWORD currentRate = CalcRate();
-                    char rateText[64];
-                    sprintf_s(rateText, "FPS: %d", currentRate);
-
-                    // You could draw text here if font system is implemented
-                    // For now, just update window title periodically
+                    // Calculate FPS
+                    DWORD currentTime = GetTickCount64();
                     frameCount++;
-                    if (frameCount % 60 == 0) // Update every 60 frames
+                    if (currentTime - lastFPSUpdate >= 1000) // Update every second
                     {
-                        char titleText[128];
-                        sprintf_s(titleText, "CH Engine Test - FPS: %d", currentRate);
-                        SetWindowTextA(g_hWnd, titleText);
+                        currentFPS = frameCount;
+                        frameCount = 0;
+                        lastFPSUpdate = currentTime;
                     }
+
+                    // Update window title with detailed information
+                    char titleText[256];
+                    sprintf_s(titleText, "CH Engine Scene Test - FPS: %d | Scene: %s | Distance: %.1f", 
+                             currentFPS, 
+                             g_SceneLoaded ? "Loaded" : "Failed", 
+                             g_CameraDistance);
+                    SetWindowTextA(g_hWnd, titleText);
 
                     // End rendering
                     End3D();

@@ -1,18 +1,10 @@
 workspace "CHEngine"
 	architecture "x64"
-	startproject "CHEngine"
+	startproject "TestCHEngine"
 
-	configurations
-	{
-		"Debug",
-		"Release",
-		"Dist"
-	}
-	
-	flags
-	{
-		"MultiProcessorCompile"
-	}
+	configurations { "Debug", "Release", "Dist" }
+
+	flags { "MultiProcessorCompile" }
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
@@ -25,10 +17,9 @@ IncludeDir["stb"] = "vendor/stb"
 
 group "Dependencies"
 	-- Add any vendor dependencies here if needed
-
 group ""
 
-project "CHEngine"
+project "CH_Engine"
 	location "CH_Engine"
 	kind "SharedLib"
 	language "C++"
@@ -38,14 +29,12 @@ project "CHEngine"
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
-	files
-	{
+	files {
 		"%{prj.name}/src/**.h",
 		"%{prj.name}/src/**.cpp"
 	}
 
-	defines
-	{
+	defines {
 		"_CRT_SECURE_NO_WARNINGS",
 		"WIN32_LEAN_AND_MEAN",
 		"NOMINMAX",
@@ -53,17 +42,17 @@ project "CHEngine"
 		"CH_CORE_DLL_EXPORTS"
 	}
 
-	includedirs
-	{
+	includedirs {
 		"%{prj.name}",
+		"%{prj.name}/src",
+		"%{prj.name}/include",
 		"%{IncludeDir.DirectXMath}",
 		"%{IncludeDir.spdlog}",
 		"%{IncludeDir.glm}",
 		"%{IncludeDir.stb}"
 	}
 
-	links 
-	{ 
+	links { 
 		"d3d11.lib",
 		"dxgi.lib",
 		"d3dcompiler.lib",
@@ -78,18 +67,19 @@ project "CHEngine"
 		"ole32.lib",
 		"uuid.lib",
 		"comdlg32.lib",
-		"advapi32.lib"
+		"advapi32.lib",
+		"ws2_32.lib",
+		"oleaut32.lib"
 	}
 
-    -- Windows-specific settings
-    filter "system:windows"
-        systemversion "latest"
-        buildoptions { "/utf-8" }
+	postbuildcommands {
+		"{COPY} %{cfg.buildtarget.relpath} ../bin/" .. outputdir .. "/TestCHEngine"
+	}
 
-		defines
-		{
-			"CH_PLATFORM_WINDOWS"
-		}
+	filter "system:windows"
+		systemversion "latest"
+		buildoptions { "/utf-8" }
+		defines { "CH_PLATFORM_WINDOWS" }
 
 	filter "configurations:Debug"
 		defines "CH_DEBUG"
@@ -106,7 +96,6 @@ project "CHEngine"
 		runtime "Release"
 		optimize "on"
 
--------------------------------------------------
 project "TestCHEngine"
 	location "TestCHEngine"
 	kind "ConsoleApp"
@@ -117,33 +106,34 @@ project "TestCHEngine"
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
 
-	files
-	{
+	files {
 		"%{prj.name}/src/**.h",
 		"%{prj.name}/src/**.cpp"
 	}
 
-	includedirs
-	{
+	defines {
+		"_CRT_SECURE_NO_WARNINGS",
+		"WIN32_LEAN_AND_MEAN",
+		"NOMINMAX",
+		"_WIN32_WINNT=0x0601"
+	}
+
+	includedirs {
 		"CH_Engine",
+		"CH_Engine/src",
+		"CH_Engine/include",
 		"%{IncludeDir.spdlog}",
 		"%{IncludeDir.glm}"
 	}
 
-	links
-	{
-		"CHEngine"
+	links {
+		"CH_Engine"
 	}
 
-    -- Windows-specific settings
-    filter "system:windows"
-        systemversion "latest"
-        buildoptions { "/utf-8" }
-
-		defines
-		{
-			"CH_PLATFORM_WINDOWS"
-		}
+	filter "system:windows"
+		systemversion "latest"
+		buildoptions { "/utf-8" }
+		defines { "CH_PLATFORM_WINDOWS" }
 
 	filter "configurations:Debug"
 		defines "CH_DEBUG"
@@ -158,4 +148,4 @@ project "TestCHEngine"
 	filter "configurations:Dist"
 		defines "CH_DIST"
 		runtime "Release"
-		optimize "on" 
+		optimize "on"

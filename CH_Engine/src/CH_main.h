@@ -14,6 +14,7 @@
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <algorithm>
+#include <ole2.h>  // For HRESULT definition
 #include "CH_common.h"
 
 // Include all constants
@@ -69,6 +70,8 @@ extern CH_CORE_DLL_API CHPresentParameters g_Present;
 
 // DirectX 11 feature level and device capabilities
 extern CH_CORE_DLL_API D3D_FEATURE_LEVEL g_FeatureLevel;
+
+
 
 // Thread safety
 extern CH_CORE_DLL_API CRITICAL_SECTION g_CriticalSection;
@@ -181,8 +184,6 @@ namespace CHInternal {
         void Cleanup();
     };
 
-    extern CompatibilityShaderManager g_ShaderManager;
-
     // DirectX 8 compatibility typedefs
     typedef CHDisplayMode D3DDISPLAYMODE;
     typedef CHDisplayMode CH_D3DDISPLAYMODE;
@@ -252,7 +253,15 @@ namespace CHInternal {
 
     typedef CH_D3DCAPS8 D3DCAPS8;
 
+    // Global variables for internal use
+    extern RenderStateManager g_RenderStateManager;
+    extern CompatibilityShaderManager g_CompatibilityShaderManager;
+}
 
+// Physics internal namespace
+namespace CHPhyInternal {
+    class PhyShaderManager;
+    extern PhyShaderManager g_PhyShaderManager;
 }
 
 #endif // _CH_main_h_

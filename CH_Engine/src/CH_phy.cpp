@@ -8,7 +8,9 @@ using namespace DirectX;
 #include <algorithm> // for std::min
 
 // Global physics shader manager
-CHPhyInternal::PhyShaderManager g_PhyShaderManager;
+namespace CHPhyInternal {
+    PhyShaderManager g_PhyShaderManager;
+}
 
 void Motion_Clear(CHMotion* lpMotion)
 {
@@ -939,7 +941,7 @@ CH_CORE_DLL_API
 void Phy_Prepare()
 {
     // Initialize shaders if not already done
-    g_PhyShaderManager.Initialize();
+    CHPhyInternal::g_PhyShaderManager.Initialize();
 }
 
 CH_CORE_DLL_API
