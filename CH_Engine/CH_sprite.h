@@ -32,7 +32,7 @@ void Sprite_Clear(CHSprite* lpSprite);
 
 CH_CORE_DLL_API
 BOOL Sprite_Load(CHSprite** lpSprite,
-                char* lpName,
+                const char* lpName,
                 CHPool pool = CH_POOL_MANAGED,
                 BOOL bDuplicate = true,
                 DWORD colorkey = 0);
@@ -111,12 +111,11 @@ namespace CHSpriteInternal {
     void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha);
     
     // Rendering utilities
-    BOOL RenderSprite(CHSprite* sprite);
-    BOOL RenderDualSprite(CHSprite* spriteUp, CHSprite* spriteDn, 
-                            UCHAR alphaA, UCHAR alphaB, UCHAR alphaC, UCHAR alphaD);
+    HRESULT RenderSprite(CHSprite* sprite);
+    HRESULT RenderDualSprite(CHSprite* spriteUp, CHSprite* spriteDn,UCHAR alphaA, UCHAR alphaB, UCHAR alphaC, UCHAR alphaD);
     
     // Texture access (for Lock/Unlock simulation)
-    BOOL CreateStagingTexture(CHTexture* texture, CHComPtr<ID3D11Texture2D>& stagingTexture);
+    HRESULT CreateStagingTexture(CHTexture* texture, CHComPtr<ID3D11Texture2D>& stagingTexture);
     void ReleaseStagingTexture();
     
     // Shader management for 2D rendering
@@ -129,7 +128,7 @@ namespace CHSpriteInternal {
         CHComPtr<ID3D11InputLayout> m_dualSpriteInputLayout;
         
     public:
-        BOOL Initialize();
+        HRESULT Initialize();
         void SetSpriteShaders();
         void SetDualSpriteShaders();
         void Cleanup();
@@ -145,14 +144,17 @@ typedef CHLockedRect D3DLOCKED_RECT;
 
 // Vertex format constants for compatibility
 #define SPRITE_VERTEX_FORMAT_DESC { \
-    "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
     { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
-    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+    { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 } \
+}
+
 
 #define DUAL_SPRITE_VERTEX_FORMAT_DESC { \
     "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
     { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
     { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 }, \
-    { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+    { "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0 }  \
+}
 
 #endif // _CH_sprite_h_

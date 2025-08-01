@@ -1,4 +1,7 @@
+#define GLM_ENABLE_EXPERIMENTAL
 #include "CH_omni.h"
+#include <glm/gtx/extended_min_max.hpp>
+#include <CH_main.h>
 
 extern const char CH_VERSION[64];
 
@@ -189,7 +192,7 @@ XMFLOAT4 CalculateLightContribution(CHOmni* light, XMVECTOR worldPos, XMVECTOR n
     
     // Calculate diffuse lighting (Lambertian)
     float ndotl = XMVectorGetX(XMVector3Dot(normal, lightDir));
-    ndotl = max(0.0f, ndotl);
+    ndotl = std::max(0.0f, ndotl);
     
     // Combine light color with attenuation and diffuse factor
     XMFLOAT4 result;
@@ -222,7 +225,7 @@ float CalculateAttenuation(CHOmni* light, XMVECTOR worldPos)
     float normalizedDistance = distance / light->fRadius;
     float attenuation = 1.0f - (normalizedDistance * light->fAttenuation);
     
-    return max(0.0f, attenuation);
+    return std::max(0.0f, attenuation);
 }
 
 void SetupLightingStates()

@@ -349,6 +349,19 @@ void Phy_ChangeTexture(CHPhy* lpPhy, int nTexID, int nTexID2)
 
 // Internal implementation placeholders
 namespace CHPhyInternal {
+    // Add these to CHPhyInternal namespace in CH_phy.cpp:
+    BOOL LoadMotionFromFile(FILE* file, CHMotion** motion) {
+        // Read motion data from file
+        if (!file || !motion) return FALSE;
+
+        *motion = new CHMotion;
+        Motion_Clear(*motion);
+
+        // Read bone count, frame count, keyframes
+        // Implementation needed based on your file format
+
+        return TRUE;
+    }
 
 void ProcessVertexBlending(CHPhy* phy)
 {

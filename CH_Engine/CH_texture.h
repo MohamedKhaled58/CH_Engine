@@ -76,7 +76,7 @@ void Texture_Clear(CHTexture* lpTex);
 */
 CH_CORE_DLL_API
 int Texture_Load(CHTexture** lpTex,
-                char* lpName,
+                const char* lpName,
                 DWORD dwMipLevels = 3,
                 CHPool pool = CH_POOL_MANAGED,
                 BOOL bDuplicate = TRUE,
@@ -106,28 +106,31 @@ namespace CHTextureInternal {
     // Format conversion utilities
     DXGI_FORMAT CHFormatToDXGI(CHFormat format);
     CHFormat DXGIToCHFormat(DXGI_FORMAT format);
-    
+
     // Texture loading from memory
-    BOOL CreateTextureFromMemory(const void* pData, size_t dataSize, 
-                                   CHTexture* texture, DWORD mipLevels, 
-                                   DWORD colorKey);
-    
+    BOOL CreateTextureFromMemory(const void* pData, size_t dataSize,
+        CHTexture* texture, DWORD mipLevels,
+        DWORD colorKey);
+    BOOL CreateTextureFromPixels(const DWORD* pixels, UINT width, UINT height, CHTexture* texture);
+
+    BOOL CreateDefaultTexture(UINT width, UINT height, CHTexture* texture);
+
     // Texture loading from file
-    BOOL CreateTextureFromFile(const char* filename, CHTexture* texture, 
-                                 DWORD mipLevels, DWORD colorKey);
-    
+    BOOL CreateTextureFromFile(const char* filename, CHTexture* texture,
+        DWORD mipLevels, DWORD colorKey);
+
     // DirectX 11 texture creation
-    BOOL CreateEmptyTexture(UINT width, UINT height, DXGI_FORMAT format, 
-                              UINT mipLevels, CHTexture* texture);
-    
+    BOOL CreateEmptyTexture(UINT width, UINT height, DXGI_FORMAT format,
+        UINT mipLevels, CHTexture* texture);
+
     // Color key processing for transparency
-    void ProcessColorKey(void* imageData, UINT width, UINT height, 
-                        DXGI_FORMAT format, DWORD colorKey);
+    void ProcessColorKey(void* imageData, UINT width, UINT height,
+        DXGI_FORMAT format, DWORD colorKey);
 }
 
 // Compatibility types for external code
 typedef CHTexture C3Texture; // For backwards compatibility
-typedef CHFormat D3DFORMAT;  // For backwards compatibility
-typedef CHPool D3DPOOL;      // For backwards compatibility
+//typedef CHFormat D3DFORMAT;  // For backwards compatibility
+//typedef CHPool D3DPOOL;      // For backwards compatibility
 
 #endif // _CH_texture_h_

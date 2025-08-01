@@ -1,5 +1,6 @@
 #include "CH_capscreen.h"
 #include "CH_main.h"
+#include <string>
 
 void CapScreen(char* lpName)
 {

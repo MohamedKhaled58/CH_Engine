@@ -1,4 +1,5 @@
 #include "CH_key.h"
+#include <CH_main.h>
 
 CH_CORE_DLL_API
 void Key_Clear(CHKey* lpKey)

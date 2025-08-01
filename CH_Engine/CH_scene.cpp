@@ -33,12 +33,23 @@ void Scene_Clear(CHScene* lpScene)
 
 CH_CORE_DLL_API
 BOOL Scene_Load(CHScene** lpScene,
-               char* lpName,
-               DWORD dwIndex)
+    char* lpName,
+    DWORD dwIndex)
 {
     FILE* file = fopen(lpName, "rb");
     if (!file)
         return FALSE;
+
+    // Check version (matching original exactly)
+    char version[64];
+    fread(version, sizeof(char), 16, file);
+    version[16] = '\0';
+    if (strcmp(version, CH_VERSION) != 0)
+    {
+        ErrorMessage("Scene version error");
+        fclose(file);
+        return FALSE;
+    }
 
     *lpScene = new CHScene;
     Scene_Clear(*lpScene);
@@ -51,16 +62,14 @@ BOOL Scene_Load(CHScene** lpScene,
         if (fread(&chunk, sizeof(ChunkHeader), 1, file) != 1)
         {
             fclose(file);
-            delete *lpScene;
-            *lpScene = nullptr;
+            Scene_Unload(lpScene);
             return FALSE;
         }
 
         if (feof(file))
         {
             fclose(file);
-            delete *lpScene;
-            *lpScene = nullptr;
+            Scene_Unload(lpScene);
             return FALSE;
         }
 
@@ -88,25 +97,25 @@ BOOL Scene_Load(CHScene** lpScene,
             // Load vertex data
             (*lpScene)->lpVB = new CHSceneVertex[(*lpScene)->dwVecCount];
             fread((*lpScene)->lpVB,
-                  sizeof(CHSceneVertex),
-                  (*lpScene)->dwVecCount,
-                  file);
+                sizeof(CHSceneVertex),
+                (*lpScene)->dwVecCount,
+                file);
 
             // Load triangle count
             fread(&(*lpScene)->dwTriCount, sizeof(DWORD), 1, file);
             // Load index data
             (*lpScene)->lpIB = new WORD[(*lpScene)->dwTriCount * 3];
             fread((*lpScene)->lpIB,
-                  sizeof(WORD),
-                  (*lpScene)->dwTriCount * 3,
-                  file);
+                sizeof(WORD),
+                (*lpScene)->dwTriCount * 3,
+                file);
 
             // Load main texture
             fread(&temp, sizeof(DWORD), 1, file);
             (*lpScene)->lpTexName = new char[temp + 1];
             fread((*lpScene)->lpTexName, 1, temp, file);
             (*lpScene)->lpTexName[temp] = '\0';
-            
+
             // Load texture
             CHTexture* tex;
             (*lpScene)->nTex = Texture_Load(&tex, (*lpScene)->lpTexName);
@@ -124,7 +133,7 @@ BOOL Scene_Load(CHScene** lpScene,
                 (*lpScene)->lplTexName = new char[temp + 1];
                 fread((*lpScene)->lplTexName, 1, temp, file);
                 (*lpScene)->lplTexName[temp] = '\0';
-                
+
                 // Load lightmap texture
                 CHTexture* ligtex;
                 (*lpScene)->nlTex = Texture_Load(&ligtex, (*lpScene)->lplTexName);
@@ -138,8 +147,18 @@ BOOL Scene_Load(CHScene** lpScene,
 
             // Load animation matrices
             fread(&(*lpScene)->dwFrameCount, sizeof(DWORD), 1, file);
-            (*lpScene)->lpFrame = new XMMATRIX[(*lpScene)->dwFrameCount];
-            fread((*lpScene)->lpFrame, sizeof(XMMATRIX), (*lpScene)->dwFrameCount, file);
+            if ((*lpScene)->dwFrameCount > 0)
+            {
+                (*lpScene)->lpFrame = new XMMATRIX[(*lpScene)->dwFrameCount];
+
+                // Read as D3DXMATRIX and convert to XMMATRIX
+                for (DWORD i = 0; i < (*lpScene)->dwFrameCount; i++)
+                {
+                    XMFLOAT4X4 matrixData;
+                    fread(&matrixData, sizeof(XMFLOAT4X4), 1, file);
+                    (*lpScene)->lpFrame[i] = XMLoadFloat4x4(&matrixData);
+                }
+            }
 
             // Create DirectX 11 buffers
             if (FAILED(CHSceneInternal::CreateVertexBuffer(*lpScene)) ||
@@ -226,9 +245,16 @@ BOOL Scene_Save(char* lpName, CHScene* lpScene, BOOL bNew)
     // Matrices
     fwrite(&lpScene->dwFrameCount, sizeof(DWORD), 1, file);
     chunk.dwChunkSize += sizeof(DWORD);
-    fwrite(lpScene->lpFrame, sizeof(XMMATRIX), lpScene->dwFrameCount, file);
-    chunk.dwChunkSize += sizeof(XMMATRIX) * lpScene->dwFrameCount;
 
+    for (DWORD i = 0; i < lpScene->dwFrameCount; i++)
+    {
+        XMFLOAT4X4 matrixData;
+        XMStoreFloat4x4(&matrixData, lpScene->lpFrame[i]);
+        fwrite(&matrixData, sizeof(XMFLOAT4X4), 1, file);
+        chunk.dwChunkSize += sizeof(XMFLOAT4X4);
+    }
+
+    // Update chunk size
     fseek(file, -static_cast<int>(chunk.dwChunkSize + sizeof(chunk)), SEEK_CUR);
     fwrite(&chunk, sizeof(chunk), 1, file);
     fseek(file, 0, SEEK_END);
@@ -243,28 +269,28 @@ void Scene_Unload(CHScene** lpScene)
     if (!lpScene || !*lpScene)
         return;
 
-    delete[] (*lpScene)->lpName;
-    delete[] (*lpScene)->lpVB;
-    delete[] (*lpScene)->lpIB;
+    delete[](*lpScene)->lpName;
+    delete[](*lpScene)->lpVB;
+    delete[](*lpScene)->lpIB;
 
-    delete[] (*lpScene)->lpTexName;
+    delete[](*lpScene)->lpTexName;
     if ((*lpScene)->nTex > -1)
         Texture_Unload(&g_lpTex[(*lpScene)->nTex]);
 
-    delete[] (*lpScene)->lplTexName;
+    delete[](*lpScene)->lplTexName;
     if ((*lpScene)->nlTex > -1)
         Texture_Unload(&g_lpTex[(*lpScene)->nlTex]);
 
-    delete[] (*lpScene)->lpFrame;
+    delete[](*lpScene)->lpFrame;
 
     // Release DirectX 11 buffers
     CHSceneInternal::ReleaseBuffers(*lpScene);
 
-    delete *lpScene;
+    delete* lpScene;
     *lpScene = nullptr;
 }
 
-// Optimization function (maintaining exact same algorithm)
+// Optimization function (maintaining exact same algorithm as original)
 CH_CORE_DLL_API
 BOOL Scene_Optimize(CHScene* lpScene)
 {
@@ -272,7 +298,7 @@ BOOL Scene_Optimize(CHScene* lpScene)
     DWORD veccount = 0;
     WORD* tri = new WORD[lpScene->dwTriCount * 3];
 
-    // Remove duplicate vertices
+    // Remove duplicate vertices (exact original algorithm)
     int index;
     for (DWORD f = 0; f < lpScene->dwTriCount; f++)
     {
@@ -280,19 +306,20 @@ BOOL Scene_Optimize(CHScene* lpScene)
         {
             index = lpScene->lpIB[f * 3 + i];
 
-            for (DWORD c = 0; c < veccount; c++)
+            DWORD c = 0;
+            for ( c = 0; c < veccount; c++)
             {
                 if (memcmp(&lpScene->lpVB[index],
-                          &vertex[c],
-                          sizeof(CHSceneVertex)) == 0)
+                    &vertex[c],
+                    sizeof(CHSceneVertex)) == 0)
                     break;
             }
             if (c == veccount)
             {
                 // Not found same vertex
-                CopyMemory(&vertex[veccount],
-                          &lpScene->lpVB[index],
-                          sizeof(CHSceneVertex));
+                memcpy(&vertex[veccount],
+                    &lpScene->lpVB[index],
+                    sizeof(CHSceneVertex));
                 tri[f * 3 + i] = static_cast<WORD>(veccount);
                 veccount++;
             }
@@ -308,9 +335,9 @@ BOOL Scene_Optimize(CHScene* lpScene)
 
     lpScene->dwVecCount = veccount;
     lpScene->lpVB = new CHSceneVertex[lpScene->dwVecCount];
-    CopyMemory(lpScene->lpVB, vertex, sizeof(CHSceneVertex) * veccount);
+    memcpy(lpScene->lpVB, vertex, sizeof(CHSceneVertex) * veccount);
 
-    CopyMemory(lpScene->lpIB, tri, sizeof(WORD) * lpScene->dwTriCount * 3);
+    memcpy(lpScene->lpIB, tri, sizeof(WORD) * lpScene->dwTriCount * 3);
 
     delete[] vertex;
     delete[] tri;
@@ -338,7 +365,7 @@ BOOL Scene_Draw(CHScene* lpScene)
     if (!lpScene || lpScene->nTex < 0 || !g_lpTex[lpScene->nTex])
         return FALSE;
 
-    // Set alpha blending based on texture format
+    // Set alpha blending based on texture format (matching original logic)
     if (CHSceneInternal::ShouldUseAlphaBlending(g_lpTex[lpScene->nTex]))
     {
         SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
@@ -354,7 +381,7 @@ BOOL Scene_Draw(CHScene* lpScene)
     if (!SetTexture(0, g_lpTex[lpScene->nTex]->lpSRV.Get()))
         return FALSE;
 
-    // Set lightmap if available
+    // Set lightmap if available (matching original)
     if (lpScene->nlTex > -1 && g_lpTex[lpScene->nlTex])
     {
         if (!SetTexture(1, g_lpTex[lpScene->nlTex]->lpSRV.Get()))
@@ -381,7 +408,7 @@ BOOL Scene_Draw(CHScene* lpScene)
     // Render the scene
     HRESULT hr = CHSceneInternal::RenderScene(lpScene);
 
-    // Reset transformation matrix
+    // Reset transformation matrix (matching original)
     lpScene->matrix = XMMatrixIdentity();
 
     return SUCCEEDED(hr);
@@ -405,123 +432,126 @@ void Scene_Muliply(CHScene* lpScene, XMMATRIX* matrix)
 // Internal implementation
 namespace CHSceneInternal {
 
-void SetupSceneRenderStates()
-{
-    SetRenderState(CH_RS_ZENABLE, TRUE);
-    SetRenderState(CH_RS_ZWRITEENABLE, TRUE);
-    SetRenderState(CH_RS_CULLMODE, CH_CULL_CW);
-
-    SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE equivalent
-    SetTextureStageState(0, CH_TSS_COLORARG2, 0); // D3DTA_DIFFUSE equivalent
-    SetTextureStageState(0, CH_TSS_COLOROP, 4);   // D3DTOP_MODULATE equivalent
-
-    SetTextureStageState(0, CH_TSS_ALPHAARG1, 0); // D3DTA_DIFFUSE
-    SetTextureStageState(0, CH_TSS_ALPHAARG2, 0); // D3DTA_DIFFUSE
-    SetTextureStageState(0, CH_TSS_ALPHAOP, 2);   // D3DTOP_SELECTARG2
-
-    SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(0, CH_TSS_MIPFILTER, CH_TEXF_LINEAR);
-}
-
-void SetupLightmapRenderStates()
-{
-    SetTextureStageState(1, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
-    SetTextureStageState(1, CH_TSS_COLORARG2, 2); // D3DTA_CURRENT
-    SetTextureStageState(1, CH_TSS_COLOROP, 8);   // D3DTOP_MODULATE2X equivalent
-
-    SetTextureStageState(1, CH_TSS_ALPHAARG1, 0); // D3DTA_DIFFUSE
-    SetTextureStageState(1, CH_TSS_ALPHAARG2, 2); // D3DTA_CURRENT
-    SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
-
-    SetTextureStageState(1, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(1, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(1, CH_TSS_MIPFILTER, CH_TEXF_NONE);
-}
-
-void DisableLightmapRenderStates()
-{
-    SetTextureStageState(1, CH_TSS_COLOROP, 1); // D3DTOP_DISABLE
-    SetTextureStageState(1, CH_TSS_ALPHAOP, 1); // D3DTOP_DISABLE
-}
-
-HRESULT CreateVertexBuffer(CHScene* scene)
-{
-    if (!scene || !scene->lpVB || scene->dwVecCount == 0)
-        return E_INVALIDARG;
-
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    bufferDesc.ByteWidth = sizeof(CHSceneVertex) * scene->dwVecCount;
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    bufferDesc.CPUAccessFlags = 0;
-
-    D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = scene->lpVB;
-
-    return g_D3DDevice->CreateBuffer(&bufferDesc, &initData, scene->vertexBuffer.GetAddressOf());
-}
-
-HRESULT CreateIndexBuffer(CHScene* scene)
-{
-    if (!scene || !scene->lpIB || scene->dwTriCount == 0)
-        return E_INVALIDARG;
-
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-    bufferDesc.ByteWidth = sizeof(WORD) * scene->dwTriCount * 3;
-    bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-    bufferDesc.CPUAccessFlags = 0;
-
-    D3D11_SUBRESOURCE_DATA initData = {};
-    initData.pSysMem = scene->lpIB;
-
-    return g_D3DDevice->CreateBuffer(&bufferDesc, &initData, scene->indexBuffer.GetAddressOf());
-}
-
-void ReleaseBuffers(CHScene* scene)
-{
-    if (scene)
+    void SetupSceneRenderStates()
     {
-        scene->vertexBuffer.Reset();
-        scene->indexBuffer.Reset();
+        // Matching original render state setup exactly
+        SetRenderState(CH_RS_ZENABLE, TRUE);
+        SetRenderState(CH_RS_ZWRITEENABLE, TRUE);
+        SetRenderState(CH_RS_CULLMODE, CH_CULL_CW);
+
+        SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(0, CH_TSS_COLORARG2, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(0, CH_TSS_COLOROP, 4);   // D3DTOP_MODULATE
+
+        SetTextureStageState(0, CH_TSS_ALPHAARG1, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(0, CH_TSS_ALPHAARG2, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(0, CH_TSS_ALPHAOP, 2);   // D3DTOP_SELECTARG2
+
+        SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(0, CH_TSS_MIPFILTER, CH_TEXF_LINEAR);
     }
-}
 
-HRESULT RenderScene(CHScene* scene)
-{
-    if (!scene || !scene->vertexBuffer || !scene->indexBuffer)
-        return E_INVALIDARG;
+    void SetupLightmapRenderStates()
+    {
+        // Matching original lightmap setup exactly
+        SetTextureStageState(1, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(1, CH_TSS_COLORARG2, 2); // D3DTA_CURRENT
+        SetTextureStageState(1, CH_TSS_COLOROP, 8);   // D3DTOP_MODULATE2X
 
-    // Set vertex buffer
-    ID3D11Buffer* vb = scene->vertexBuffer.Get();
-    g_D3DContext->IASetVertexBuffers(0, 1, &vb, &scene->vertexStride, &scene->vertexOffset);
+        SetTextureStageState(1, CH_TSS_ALPHAARG1, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(1, CH_TSS_ALPHAARG2, 2); // D3DTA_CURRENT
+        SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
 
-    // Set index buffer
-    g_D3DContext->IASetIndexBuffer(scene->indexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+        SetTextureStageState(1, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(1, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(1, CH_TSS_MIPFILTER, CH_TEXF_NONE);
+    }
 
-    // Set primitive topology
-    g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    void DisableLightmapRenderStates()
+    {
+        SetTextureStageState(1, CH_TSS_COLOROP, 1); // D3DTOP_DISABLE
+        SetTextureStageState(1, CH_TSS_ALPHAOP, 1); // D3DTOP_DISABLE
+    }
 
-    // Set default shaders
-    CHInternal::g_ShaderManager.SetDefaultShaders();
+    HRESULT CreateVertexBuffer(CHScene* scene)
+    {
+        if (!scene || !scene->lpVB || scene->dwVecCount == 0)
+            return E_INVALIDARG;
 
-    // Draw
-    g_D3DContext->DrawIndexed(scene->dwTriCount * 3, 0, 0);
+        D3D11_BUFFER_DESC bufferDesc = {};
+        bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+        bufferDesc.ByteWidth = sizeof(CHSceneVertex) * scene->dwVecCount;
+        bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bufferDesc.CPUAccessFlags = 0;
 
-    return S_OK;
-}
+        D3D11_SUBRESOURCE_DATA initData = {};
+        initData.pSysMem = scene->lpVB;
 
-bool ShouldUseAlphaBlending(CHTexture* texture)
-{
-    if (!texture)
-        return false;
+        return g_D3DDevice->CreateBuffer(&bufferDesc, &initData, scene->vertexBuffer.GetAddressOf());
+    }
 
-    // Check if texture format has alpha channel
-    CHFormat format = texture->Info.Format;
-    return (format == CH_FMT_A8R8G8B8 ||
+    HRESULT CreateIndexBuffer(CHScene* scene)
+    {
+        if (!scene || !scene->lpIB || scene->dwTriCount == 0)
+            return E_INVALIDARG;
+
+        D3D11_BUFFER_DESC bufferDesc = {};
+        bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+        bufferDesc.ByteWidth = sizeof(WORD) * scene->dwTriCount * 3;
+        bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        bufferDesc.CPUAccessFlags = 0;
+
+        D3D11_SUBRESOURCE_DATA initData = {};
+        initData.pSysMem = scene->lpIB;
+
+        return g_D3DDevice->CreateBuffer(&bufferDesc, &initData, scene->indexBuffer.GetAddressOf());
+    }
+
+    void ReleaseBuffers(CHScene* scene)
+    {
+        if (scene)
+        {
+            scene->vertexBuffer.Reset();
+            scene->indexBuffer.Reset();
+        }
+    }
+
+    HRESULT RenderScene(CHScene* scene)
+    {
+        if (!scene || !scene->vertexBuffer || !scene->indexBuffer)
+            return E_INVALIDARG;
+
+        // Set vertex buffer
+        ID3D11Buffer* vb = scene->vertexBuffer.Get();
+        g_D3DContext->IASetVertexBuffers(0, 1, &vb, &scene->vertexStride, &scene->vertexOffset);
+
+        // Set index buffer
+        g_D3DContext->IASetIndexBuffer(scene->indexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+        // Set primitive topology
+        g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        // Set default shaders
+        CHInternal::g_ShaderManager.SetDefaultShaders();
+
+        // Draw (matching original DrawIndexedPrimitive)
+        g_D3DContext->DrawIndexed(scene->dwTriCount * 3, 0, 0);
+
+        return S_OK;
+    }
+
+    bool ShouldUseAlphaBlending(CHTexture* texture)
+    {
+        if (!texture)
+            return false;
+
+        // Check if texture format has alpha channel (matching original logic)
+        CHFormat format = texture->Info.Format;
+        return (format == CH_FMT_A8R8G8B8 ||
             format == CH_FMT_A1R5G5B5 ||
-            format == CH_FMT_A4R4G4B4);
-}
+            format == CH_FMT_A4R4G4B4 ||
+            format == CH_FMT_DXT3);
+    }
 
 } // namespace CHSceneInternal

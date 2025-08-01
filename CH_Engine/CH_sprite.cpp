@@ -18,8 +18,8 @@ void Sprite_Clear(CHSprite* lpSprite)
         lpSprite->vertex[v].rhw = 1.0f;
         lpSprite->vertex[v].color = 0xFFFFFFFF; // D3DCOLOR_ARGB(255, 255, 255, 255)
     }
-    
-    // Set default UV coordinates
+
+    // Set default UV coordinates (matching original exactly)
     lpSprite->vertex[0].u = 0.0f;
     lpSprite->vertex[0].v = 0.0f;
 
@@ -37,17 +37,17 @@ void Sprite_Clear(CHSprite* lpSprite)
 
 CH_CORE_DLL_API
 BOOL Sprite_Load(CHSprite** lpSprite,
-                char* lpName,
-                CHPool pool,
-                BOOL bDuplicate,
-                DWORD colorkey)
+    const char* lpName,
+    CHPool pool,
+    BOOL bDuplicate,
+    DWORD colorkey)
 {
     *lpSprite = new CHSprite;
     Sprite_Clear(*lpSprite);
 
     if (Texture_Load(&(*lpSprite)->lpTex, lpName, 1, pool, bDuplicate, colorkey) == -1)
     {
-        delete *lpSprite;
+        delete* lpSprite;
         *lpSprite = nullptr;
         return FALSE;
     }
@@ -58,18 +58,18 @@ BOOL Sprite_Load(CHSprite** lpSprite,
 
 CH_CORE_DLL_API
 BOOL Sprite_Create(CHSprite** lpSprite,
-                  DWORD dwWidth,
-                  DWORD dwHeight,
-                  DWORD dwMipLevels,
-                  CHFormat format,
-                  CHPool pool)
+    DWORD dwWidth,
+    DWORD dwHeight,
+    DWORD dwMipLevels,
+    CHFormat format,
+    CHPool pool)
 {
     *lpSprite = new CHSprite;
     Sprite_Clear(*lpSprite);
 
     if (!Texture_Create(&(*lpSprite)->lpTex, dwWidth, dwHeight, dwMipLevels, format, pool))
     {
-        delete *lpSprite;
+        delete* lpSprite;
         *lpSprite = nullptr;
         return FALSE;
     }
@@ -81,11 +81,11 @@ void Sprite_Unload(CHSprite** lpSprite)
 {
     if (!lpSprite || !*lpSprite)
         return;
-        
+
     if ((*lpSprite)->lpTex)
         Texture_Unload(&(*lpSprite)->lpTex);
-    
-    delete *lpSprite;
+
+    delete* lpSprite;
     *lpSprite = nullptr;
 }
 
@@ -94,7 +94,7 @@ void Sprite_Mirror(CHSprite* lpSprite)
 {
     float u, v;
 
-    // Swap top vertices UV
+    // Swap top vertices UV (matching original exactly)
     u = lpSprite->vertex[0].u;
     v = lpSprite->vertex[0].v;
     lpSprite->vertex[0].u = lpSprite->vertex[2].u;
@@ -113,15 +113,16 @@ void Sprite_Mirror(CHSprite* lpSprite)
 
 CH_CORE_DLL_API
 void Sprite_SetCoor(CHSprite* lpSprite,
-                   RECT* lpSrc,
-                   int nX,
-                   int nY,
-                   DWORD dwWidth,
-                   DWORD dwHeight)
+    RECT* lpSrc,
+    int nX,
+    int nY,
+    DWORD dwWidth,
+    DWORD dwHeight)
 {
     if (!lpSprite || !lpSprite->lpTex)
         return;
 
+    // Matching original algorithm exactly
     float uu = 1.0f / static_cast<float>(lpSprite->lpTex->Info.Width);
     float vv = 1.0f / static_cast<float>(lpSprite->lpTex->Info.Height);
 
@@ -160,7 +161,7 @@ void Sprite_SetCoor(CHSprite* lpSprite,
         lpSprite->vertex[3].v = lpSprite->vertex[1].v;
     }
 
-    // Set screen coordinates
+    // Set screen coordinates (matching original exactly)
     DWORD actualWidth = dwWidth == 0 ? lpSprite->lpTex->Info.Width : dwWidth;
     DWORD actualHeight = dwHeight == 0 ? lpSprite->lpTex->Info.Height : dwHeight;
 
@@ -206,10 +207,9 @@ BOOL Sprite_Draw(CHSprite* lpSprite, DWORD dwShowWay)
     if (!lpSprite || !lpSprite->lpTex)
         return FALSE;
 
-    // Set blend mode based on show way
-    DWORD vertexAlpha = lpSprite->vertex[0].color >> 24;
-    CHSpriteInternal::SetBlendMode(static_cast<CHSpriteInternal::SpriteBlendMode>(dwShowWay), 
-                                  lpSprite->lpTex, vertexAlpha);
+    // Set blend mode based on show way (matching original logic exactly)
+    CHSpriteInternal::SetBlendMode(static_cast<CHSpriteInternal::SpriteBlendMode>(dwShowWay),
+        lpSprite->lpTex, lpSprite->vertex[0].color >> 24);
 
     // Set texture
     if (!SetTexture(0, lpSprite->lpTex->lpSRV.Get()))
@@ -220,14 +220,14 @@ BOOL Sprite_Draw(CHSprite* lpSprite, DWORD dwShowWay)
 }
 
 CH_CORE_DLL_API
-BOOL Sprite_Draw(CHSprite* lpSpriteUp, CHSprite* lpSpriteDn, 
-                UCHAR uAlphaA, UCHAR uAlphaB, UCHAR uAlphaC, UCHAR uAlphaD)
+BOOL Sprite_Draw(CHSprite* lpSpriteUp, CHSprite* lpSpriteDn,
+    UCHAR uAlphaA, UCHAR uAlphaB, UCHAR uAlphaC, UCHAR uAlphaD)
 {
     if (!lpSpriteUp || !lpSpriteDn)
         return FALSE;
 
-    return SUCCEEDED(CHSpriteInternal::RenderDualSprite(lpSpriteUp, lpSpriteDn, 
-                                                       uAlphaA, uAlphaB, uAlphaC, uAlphaD));
+    return SUCCEEDED(CHSpriteInternal::RenderDualSprite(lpSpriteUp, lpSpriteDn,
+        uAlphaA, uAlphaB, uAlphaC, uAlphaD));
 }
 
 CH_CORE_DLL_API
@@ -272,39 +272,41 @@ void Sprite_Unlock(CHSprite* lpSprite)
 // Internal implementation
 namespace CHSpriteInternal {
 
-void SetupSpriteRenderStates()
-{
-    SetRenderState(CH_RS_ZENABLE, FALSE);
-    SetRenderState(CH_RS_ZWRITEENABLE, FALSE);
-    SetRenderState(CH_RS_CULLMODE, CH_CULL_NONE);
-
-    SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
-    SetTextureStageState(0, CH_TSS_COLORARG2, 0); // D3DTA_DIFFUSE
-    SetTextureStageState(0, CH_TSS_COLOROP, 4);   // D3DTOP_MODULATE
-
-    SetTextureStageState(0, CH_TSS_ALPHAARG1, 1); // D3DTA_TEXTURE
-    SetTextureStageState(0, CH_TSS_ALPHAARG2, 0); // D3DTA_DIFFUSE
-    SetTextureStageState(0, CH_TSS_ALPHAOP, 4);   // D3DTOP_MODULATE
-
-    SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_POINT);
-    SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_POINT);
-    SetTextureStageState(0, CH_TSS_MIPFILTER, CH_TEXF_NONE);
-
-    SetTextureStageState(1, CH_TSS_COLOROP, 1);   // D3DTOP_DISABLE
-    SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
-}
-
-void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha)
-{
-    bool hasAlpha = (texture->Info.Format == CH_FMT_A8R8G8B8 ||
-                     texture->Info.Format == CH_FMT_A1R5G5B5 ||
-                     texture->Info.Format == CH_FMT_A4R4G4B4 ||
-                     texture->Info.Format == CH_FMT_DXT3 ||
-                     vertexAlpha < 255);
-
-    switch (mode)
+    void SetupSpriteRenderStates()
     {
-        case BLEND_NORMAL:
+        // Matching original render states exactly
+        SetRenderState(CH_RS_ZENABLE, FALSE);
+        SetRenderState(CH_RS_ZWRITEENABLE, FALSE);
+        SetRenderState(CH_RS_CULLMODE, CH_CULL_NONE);
+
+        SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(0, CH_TSS_COLORARG2, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(0, CH_TSS_COLOROP, 4);   // D3DTOP_MODULATE
+
+        SetTextureStageState(0, CH_TSS_ALPHAARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(0, CH_TSS_ALPHAARG2, 0); // D3DTA_DIFFUSE
+        SetTextureStageState(0, CH_TSS_ALPHAOP, 4);   // D3DTOP_MODULATE
+
+        SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_POINT);
+        SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_POINT);
+        SetTextureStageState(0, CH_TSS_MIPFILTER, CH_TEXF_NONE);
+
+        SetTextureStageState(1, CH_TSS_COLOROP, 1);   // D3DTOP_DISABLE
+        SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
+    }
+
+    void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha)
+    {
+        // Check if texture has alpha (matching original logic exactly)
+        bool hasAlpha = (texture->Info.Format == CH_FMT_A8R8G8B8 ||
+            texture->Info.Format == CH_FMT_A1R5G5B5 ||
+            texture->Info.Format == CH_FMT_A4R4G4B4 ||
+            texture->Info.Format == CH_FMT_DXT3 ||
+            vertexAlpha < 255);
+
+        switch (mode)
+        {
+        case BLEND_NORMAL: // dwShowWay == 0
             if (hasAlpha)
             {
                 SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
@@ -317,7 +319,7 @@ void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha)
             }
             break;
 
-        case BLEND_ADDITIVE:
+        case BLEND_ADDITIVE: // dwShowWay == 1
             if (hasAlpha)
             {
                 SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
@@ -332,7 +334,7 @@ void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha)
             }
             break;
 
-        case BLEND_SPECIAL:
+        case BLEND_SPECIAL: // dwShowWay == 2
             if (hasAlpha)
             {
                 SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
@@ -346,164 +348,164 @@ void SetBlendMode(SpriteBlendMode mode, CHTexture* texture, DWORD vertexAlpha)
                 SetRenderState(CH_RS_DESTBLEND, CH_BLEND_ONE);
             }
             break;
+        }
     }
-}
 
-HRESULT RenderSprite(CHSprite* sprite)
-{
-    if (!sprite)
-        return E_INVALIDARG;
-
-    // Create temporary vertex buffer for this draw call
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
-    bufferDesc.ByteWidth = sizeof(CHSpriteVertex) * 4;
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-    CHComPtr<ID3D11Buffer> vertexBuffer;
-    HRESULT hr = g_D3DDevice->CreateBuffer(&bufferDesc, nullptr, vertexBuffer.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
-
-    // Map and fill vertex buffer
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    hr = g_D3DContext->Map(vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-    if (FAILED(hr))
-        return hr;
-
-    memcpy(mappedResource.pData, sprite->vertex, sizeof(CHSpriteVertex) * 4);
-    g_D3DContext->Unmap(vertexBuffer.Get(), 0);
-
-    // Set vertex buffer and draw
-    UINT stride = sizeof(CHSpriteVertex);
-    UINT offset = 0;
-    ID3D11Buffer* vb = vertexBuffer.Get();
-    g_D3DContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
-    g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-    // Set sprite shaders
-    g_SpriteShaderManager.SetSpriteShaders();
-
-    // Draw triangle strip (2 triangles = 4 vertices)
-    g_D3DContext->Draw(4, 0);
-
-    return S_OK;
-}
-
-HRESULT RenderDualSprite(CHSprite* spriteUp, CHSprite* spriteDn, 
-                        UCHAR alphaA, UCHAR alphaB, UCHAR alphaC, UCHAR alphaD)
-{
-    if (!spriteUp || !spriteDn)
-        return E_INVALIDARG;
-
-    // Prepare dual-texture vertices
-    CHSpriteVertex2 vertices[4];
-    
-    // Set alpha values for upper sprite
-    DWORD alphaValues[4] = {alphaA, alphaB, alphaC, alphaD};
-    
-    for (int i = 0; i < 4; i++)
+    HRESULT RenderSprite(CHSprite* sprite)
     {
-        vertices[i].x = spriteUp->vertex[i].x;
-        vertices[i].y = spriteUp->vertex[i].y;
-        vertices[i].z = spriteUp->vertex[i].z;
-        vertices[i].rhw = spriteUp->vertex[i].rhw;
-        
-        // Apply alpha to upper sprite color
-        DWORD baseColor = spriteUp->vertex[i].color & 0x00FFFFFF;
-        vertices[i].color = baseColor | (alphaValues[i] << 24);
-        
-        vertices[i].u1 = vertices[i].u2 = spriteUp->vertex[i].u;
-        vertices[i].v1 = vertices[i].v2 = spriteUp->vertex[i].v;
+        if (!sprite)
+            return E_INVALIDARG;
+
+        // Create temporary vertex buffer for this draw call (immediate mode equivalent)
+        D3D11_BUFFER_DESC bufferDesc = {};
+        bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+        bufferDesc.ByteWidth = sizeof(CHSpriteVertex) * 4;
+        bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        CHComPtr<ID3D11Buffer> vertexBuffer;
+        HRESULT hr = g_D3DDevice->CreateBuffer(&bufferDesc, nullptr, vertexBuffer.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
+
+        // Map and fill vertex buffer
+        D3D11_MAPPED_SUBRESOURCE mappedResource;
+        hr = g_D3DContext->Map(vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+        if (FAILED(hr))
+            return hr;
+
+        memcpy(mappedResource.pData, sprite->vertex, sizeof(CHSpriteVertex) * 4);
+        g_D3DContext->Unmap(vertexBuffer.Get(), 0);
+
+        // Set vertex buffer and draw
+        UINT stride = sizeof(CHSpriteVertex);
+        UINT offset = 0;
+        ID3D11Buffer* vb = vertexBuffer.Get();
+        g_D3DContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+        // Set sprite shaders
+        g_SpriteShaderManager.SetSpriteShaders();
+
+        // Draw triangle strip (2 triangles = 4 vertices) - matching original
+        g_D3DContext->Draw(4, 0);
+
+        return S_OK;
     }
 
-    // Create vertex buffer
-    D3D11_BUFFER_DESC bufferDesc = {};
-    bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
-    bufferDesc.ByteWidth = sizeof(CHSpriteVertex2) * 4;
-    bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    HRESULT RenderDualSprite(CHSprite* spriteUp, CHSprite* spriteDn,
+        UCHAR alphaA, UCHAR alphaB, UCHAR alphaC, UCHAR alphaD)
+    {
+        if (!spriteUp || !spriteDn)
+            return E_INVALIDARG;
 
-    CHComPtr<ID3D11Buffer> vertexBuffer;
-    HRESULT hr = g_D3DDevice->CreateBuffer(&bufferDesc, nullptr, vertexBuffer.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        // Prepare dual-texture vertices (matching original algorithm exactly)
+        CHSpriteVertex2 vertices[4];
 
-    // Map and fill vertex buffer
-    D3D11_MAPPED_SUBRESOURCE mappedResource;
-    hr = g_D3DContext->Map(vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-    if (FAILED(hr))
-        return hr;
+        // Set alpha values for upper sprite (matching original)
+        DWORD alphaValues[4] = { alphaA, alphaB, alphaC, alphaD };
 
-    memcpy(mappedResource.pData, vertices, sizeof(CHSpriteVertex2) * 4);
-    g_D3DContext->Unmap(vertexBuffer.Get(), 0);
+        for (int i = 0; i < 4; i++)
+        {
+            vertices[i].x = spriteUp->vertex[i].x;
+            vertices[i].y = spriteUp->vertex[i].y;
+            vertices[i].z = spriteUp->vertex[i].z;
+            vertices[i].rhw = spriteUp->vertex[i].rhw;
 
-    // Set textures
-    SetTexture(0, spriteDn->lpTex->lpSRV.Get());
-    SetTexture(1, spriteUp->lpTex->lpSRV.Get());
+            // Apply alpha to upper sprite color (matching original)
+            DWORD baseColor = spriteUp->vertex[i].color & 0x00FFFFFF;
+            vertices[i].color = baseColor | (alphaValues[i] << 24);
 
-    // Set render states for dual sprite blending
-    SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
-    
-    // Set texture stage states for dual texture blending
-    SetTextureStageState(0, CH_TSS_COLOROP, 2);   // D3DTOP_SELECTARG1
-    SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
-    SetTextureStageState(0, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
+            vertices[i].u1 = vertices[i].u2 = spriteUp->vertex[i].u;
+            vertices[i].v1 = vertices[i].v2 = spriteUp->vertex[i].v;
+        }
 
-    SetTextureStageState(1, CH_TSS_COLOROP, 12);  // D3DTOP_BLENDDIFFUSEALPHA equivalent
-    SetTextureStageState(1, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
-    SetTextureStageState(1, CH_TSS_COLORARG2, 2); // D3DTA_CURRENT
-    SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
+        // Create vertex buffer
+        D3D11_BUFFER_DESC bufferDesc = {};
+        bufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+        bufferDesc.ByteWidth = sizeof(CHSpriteVertex2) * 4;
+        bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-    SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(1, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
-    SetTextureStageState(1, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
+        CHComPtr<ID3D11Buffer> vertexBuffer;
+        HRESULT hr = g_D3DDevice->CreateBuffer(&bufferDesc, nullptr, vertexBuffer.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    // Set vertex buffer and draw
-    UINT stride = sizeof(CHSpriteVertex2);
-    UINT offset = 0;
-    ID3D11Buffer* vb = vertexBuffer.Get();
-    g_D3DContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
-    g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        // Map and fill vertex buffer
+        D3D11_MAPPED_SUBRESOURCE mappedResource;
+        hr = g_D3DContext->Map(vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+        if (FAILED(hr))
+            return hr;
 
-    // Set dual sprite shaders
-    g_SpriteShaderManager.SetDualSpriteShaders();
+        memcpy(mappedResource.pData, vertices, sizeof(CHSpriteVertex2) * 4);
+        g_D3DContext->Unmap(vertexBuffer.Get(), 0);
 
-    // Draw
-    g_D3DContext->Draw(4, 0);
+        // Set textures (matching original order)
+        SetTexture(0, spriteDn->lpTex->lpSRV.Get());
+        SetTexture(1, spriteUp->lpTex->lpSRV.Get());
 
-    // Disable second texture stage
-    SetTextureStageState(1, CH_TSS_COLOROP, 1); // D3DTOP_DISABLE
+        // Set render states for dual sprite blending (matching original exactly)
+        SetRenderState(CH_RS_ALPHABLENDENABLE, TRUE);
 
-    return S_OK;
-}
+        // Set texture stage states for dual texture blending (matching original)
+        SetTextureStageState(0, CH_TSS_COLOROP, 2);   // D3DTOP_SELECTARG1
+        SetTextureStageState(0, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(0, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
 
-HRESULT CreateStagingTexture(CHTexture* texture, CHComPtr<ID3D11Texture2D>& stagingTexture)
-{
-    if (!texture || !texture->lpTex)
-        return E_INVALIDARG;
+        SetTextureStageState(1, CH_TSS_COLOROP, 12);  // D3DTOP_BLENDDIFFUSEALPHA
+        SetTextureStageState(1, CH_TSS_COLORARG1, 1); // D3DTA_TEXTURE
+        SetTextureStageState(1, CH_TSS_COLORARG2, 2); // D3DTA_CURRENT
+        SetTextureStageState(1, CH_TSS_ALPHAOP, 1);   // D3DTOP_DISABLE
 
-    D3D11_TEXTURE2D_DESC desc = texture->d3dDesc;
-    desc.Usage = D3D11_USAGE_STAGING;
-    desc.BindFlags = 0;
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+        SetTextureStageState(0, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(1, CH_TSS_MAGFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
+        SetTextureStageState(1, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
 
-    return g_D3DDevice->CreateTexture2D(&desc, nullptr, stagingTexture.GetAddressOf());
-}
+        // Set vertex buffer and draw
+        UINT stride = sizeof(CHSpriteVertex2);
+        UINT offset = 0;
+        ID3D11Buffer* vb = vertexBuffer.Get();
+        g_D3DContext->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
+        g_D3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-void ReleaseStagingTexture()
-{
-    g_StagingTexture.Reset();
-    ZeroMemory(&g_MappedResource, sizeof(g_MappedResource));
-}
+        // Set dual sprite shaders
+        g_SpriteShaderManager.SetDualSpriteShaders();
 
-// Sprite shader manager implementation
-HRESULT SpriteShaderManager::Initialize()
-{
-    // Create 2D sprite vertex shader (screen-space transformation)
-    const char* vertexShaderSource = R"(
+        // Draw
+        g_D3DContext->Draw(4, 0);
+
+        // Disable second texture stage (matching original)
+        SetTextureStageState(1, CH_TSS_COLOROP, 1); // D3DTOP_DISABLE
+
+        return S_OK;
+    }
+
+    HRESULT CreateStagingTexture(CHTexture* texture, CHComPtr<ID3D11Texture2D>& stagingTexture)
+    {
+        if (!texture || !texture->lpTex)
+            return E_INVALIDARG;
+
+        D3D11_TEXTURE2D_DESC desc = texture->d3dDesc;
+        desc.Usage = D3D11_USAGE_STAGING;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
+
+        return g_D3DDevice->CreateTexture2D(&desc, nullptr, stagingTexture.GetAddressOf());
+    }
+
+    void ReleaseStagingTexture()
+    {
+        g_StagingTexture.Reset();
+        ZeroMemory(&g_MappedResource, sizeof(g_MappedResource));
+    }
+
+    // Sprite shader manager implementation
+    HRESULT SpriteShaderManager::Initialize()
+    {
+        // Create 2D sprite vertex shader (screen-space transformation)
+        const char* vertexShaderSource = R"(
         struct VS_INPUT
         {
             float4 Pos : POSITION;
@@ -522,10 +524,9 @@ HRESULT SpriteShaderManager::Initialize()
         {
             PS_INPUT output = (PS_INPUT)0;
             
-            // Convert screen coordinates to NDC
-            // Input is in screen space, convert to normalized device coordinates
-            output.Pos.x = (input.Pos.x / 1024.0f) * 2.0f - 1.0f;  // Assuming 1024 screen width
-            output.Pos.y = 1.0f - (input.Pos.y / 768.0f) * 2.0f;   // Assuming 768 screen height (flip Y)
+            // Convert screen coordinates to NDC (matching DirectX 8 transform)
+            output.Pos.x = (input.Pos.x / 1024.0f) * 2.0f - 1.0f;  
+            output.Pos.y = 1.0f - (input.Pos.y / 768.0f) * 2.0f;   // Flip Y
             output.Pos.z = input.Pos.z;
             output.Pos.w = input.Pos.w;
             
@@ -535,7 +536,7 @@ HRESULT SpriteShaderManager::Initialize()
         }
     )";
 
-    const char* pixelShaderSource = R"(
+        const char* pixelShaderSource = R"(
         Texture2D shaderTexture : register(t0);
         SamplerState sampleType : register(s0);
         
@@ -553,72 +554,71 @@ HRESULT SpriteShaderManager::Initialize()
         }
     )";
 
-    // Compile and create shaders (similar to previous shader creation)
-    CHComPtr<ID3DBlob> vertexShaderBlob;
-    CHComPtr<ID3DBlob> errorBlob;
-    
-    HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
-                           "main", "vs_4_0", 0, 0, vertexShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        // Compile and create shaders
+        CHComPtr<ID3DBlob> vertexShaderBlob;
+        CHComPtr<ID3DBlob> errorBlob;
 
-    hr = g_D3DDevice->CreateVertexShader(vertexShaderBlob->GetBufferPointer(), 
-                                        vertexShaderBlob->GetBufferSize(), 
-                                        nullptr, m_spriteVertexShader.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        HRESULT hr = D3DCompile(vertexShaderSource, strlen(vertexShaderSource), nullptr, nullptr, nullptr,
+            "main", "vs_4_0", 0, 0, vertexShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    // Create pixel shader
-    CHComPtr<ID3DBlob> pixelShaderBlob;
-    hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
-                   "main", "ps_4_0", 0, 0, pixelShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        hr = g_D3DDevice->CreateVertexShader(vertexShaderBlob->GetBufferPointer(),
+            vertexShaderBlob->GetBufferSize(),
+            nullptr, m_spriteVertexShader.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    hr = g_D3DDevice->CreatePixelShader(pixelShaderBlob->GetBufferPointer(), 
-                                       pixelShaderBlob->GetBufferSize(), 
-                                       nullptr, m_spritePixelShader.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        // Create pixel shader
+        CHComPtr<ID3DBlob> pixelShaderBlob;
+        hr = D3DCompile(pixelShaderSource, strlen(pixelShaderSource), nullptr, nullptr, nullptr,
+            "main", "ps_4_0", 0, 0, pixelShaderBlob.GetAddressOf(), errorBlob.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    // Create input layout for sprite
-    D3D11_INPUT_ELEMENT_DESC spriteLayout[] = SPRITE_VERTEX_FORMAT_DESC;
-    hr = g_D3DDevice->CreateInputLayout(spriteLayout, ARRAYSIZE(spriteLayout), 
-                                       vertexShaderBlob->GetBufferPointer(),
-                                       vertexShaderBlob->GetBufferSize(), 
-                                       m_spriteInputLayout.GetAddressOf());
-    if (FAILED(hr))
-        return hr;
+        hr = g_D3DDevice->CreatePixelShader(pixelShaderBlob->GetBufferPointer(),
+            pixelShaderBlob->GetBufferSize(),
+            nullptr, m_spritePixelShader.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    // TODO: Create dual sprite shaders and input layout
-    // For now, use the same shaders
-    m_dualSpritePixelShader = m_spritePixelShader;
-    m_dualSpriteInputLayout = m_spriteInputLayout;
+        // Create input layout for sprite
+        D3D11_INPUT_ELEMENT_DESC spriteLayout[] = SPRITE_VERTEX_FORMAT_DESC;
+        hr = g_D3DDevice->CreateInputLayout(spriteLayout, ARRAYSIZE(spriteLayout),
+            vertexShaderBlob->GetBufferPointer(),
+            vertexShaderBlob->GetBufferSize(),
+            m_spriteInputLayout.GetAddressOf());
+        if (FAILED(hr))
+            return hr;
 
-    return S_OK;
-}
+        // For dual sprite, use same shaders for now (can be enhanced later)
+        m_dualSpritePixelShader = m_spritePixelShader;
+        m_dualSpriteInputLayout = m_spriteInputLayout;
 
-void SpriteShaderManager::SetSpriteShaders()
-{
-    g_D3DContext->VSSetShader(m_spriteVertexShader.Get(), nullptr, 0);
-    g_D3DContext->PSSetShader(m_spritePixelShader.Get(), nullptr, 0);
-    g_D3DContext->IASetInputLayout(m_spriteInputLayout.Get());
-}
+        return S_OK;
+    }
 
-void SpriteShaderManager::SetDualSpriteShaders()
-{
-    g_D3DContext->VSSetShader(m_spriteVertexShader.Get(), nullptr, 0);
-    g_D3DContext->PSSetShader(m_dualSpritePixelShader.Get(), nullptr, 0);
-    g_D3DContext->IASetInputLayout(m_dualSpriteInputLayout.Get());
-}
+    void SpriteShaderManager::SetSpriteShaders()
+    {
+        g_D3DContext->VSSetShader(m_spriteVertexShader.Get(), nullptr, 0);
+        g_D3DContext->PSSetShader(m_spritePixelShader.Get(), nullptr, 0);
+        g_D3DContext->IASetInputLayout(m_spriteInputLayout.Get());
+    }
 
-void SpriteShaderManager::Cleanup()
-{
-    m_spriteVertexShader.Reset();
-    m_spritePixelShader.Reset();
-    m_dualSpritePixelShader.Reset();
-    m_spriteInputLayout.Reset();
-    m_dualSpriteInputLayout.Reset();
-}
+    void SpriteShaderManager::SetDualSpriteShaders()
+    {
+        g_D3DContext->VSSetShader(m_spriteVertexShader.Get(), nullptr, 0);
+        g_D3DContext->PSSetShader(m_dualSpritePixelShader.Get(), nullptr, 0);
+        g_D3DContext->IASetInputLayout(m_dualSpriteInputLayout.Get());
+    }
+
+    void SpriteShaderManager::Cleanup()
+    {
+        m_spriteVertexShader.Reset();
+        m_spritePixelShader.Reset();
+        m_dualSpritePixelShader.Reset();
+        m_spriteInputLayout.Reset();
+        m_dualSpriteInputLayout.Reset();
+    }
 
 } // namespace CHSpriteInternal

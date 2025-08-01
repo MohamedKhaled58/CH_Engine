@@ -6,10 +6,10 @@
 #include <string>
 
 // Global file handle for compatibility
-FILE* g_filetemp = nullptr;
+CH_CORE_DLL_API FILE* g_filetemp = nullptr;
 
 // Global mutex for thread safety
-CRITICAL_SECTION g_GlobalMutex;
+CH_CORE_DLL_API CRITICAL_SECTION g_GlobalMutex;
 
 // Error handling functions
 void AssertDialog(const char* expression, const char* file, int line)
@@ -46,7 +46,7 @@ void CH_OutputMessage(const char* expression, long result, const char* file, int
     message += "HRESULT: 0x" + std::to_string(result) + "\n";
     message += "File: " + std::string(file) + "\n";
     message += "Line: " + std::to_string(line);
-    
+
     ErrorMessage(message.c_str());
 }
 
@@ -86,7 +86,7 @@ void CutString(char* lpString, DWORD dwLevel)
             }
         }
     }
-    
+
     if (nowS < dwLevel)
         return;
 
@@ -135,7 +135,7 @@ FILE* Common_OpenRes(const char* name)
 {
     if (g_filetemp)
         fclose(g_filetemp);
-    
+
     g_filetemp = fopen(name, "rb");
     if (g_filetemp)
         fseek(g_filetemp, 16, SEEK_SET);
@@ -144,13 +144,12 @@ FILE* Common_OpenRes(const char* name)
 
 HANDLE Common_OpenResPack(const char* name, int& nSize)
 {
-    HANDLE f;
     DWORD id = pack_name(name);
     DWORD fid = real_name(name);
     DWORD m_Offset;
     CHDataFileIndex* pf;
     int i;
-    
+
     // Search the WFile
     for (i = 0; i < MAXDATAFILE; i++)
     {
@@ -159,18 +158,15 @@ HANDLE Common_OpenResPack(const char* name, int& nSize)
             pf = DataFile_SearchFile(&_WDF[i], fid);
             if (pf == nullptr)
                 return INVALID_HANDLE_VALUE;
-            f = DataFile_GetFileHandle(&_WDF[i]);
+            HANDLE f = DataFile_GetFileHandle(&_WDF[i]);
             m_Offset = pf->offset;
             nSize = pf->size;
             SetFilePointer(f, m_Offset + 16, 0, FILE_BEGIN);
-            break;
+            return f;
         }
     }
-    
-    if (i == MAXDATAFILE)
-        return INVALID_HANDLE_VALUE;
-    else
-        return f;
+
+    return INVALID_HANDLE_VALUE;
 }
 
 void Common_ClearRes(FILE* file)
@@ -196,12 +192,12 @@ BOOL Common_IsEofRes()
 {
     if (!g_filetemp)
         return TRUE;
-        
+
     long current = ftell(g_filetemp);
     fseek(g_filetemp, 0, SEEK_END);
     long end = ftell(g_filetemp);
     fseek(g_filetemp, current, SEEK_SET);
-    
+
     return current >= end;
 }
 
@@ -228,22 +224,22 @@ void Common_Scale(XMMATRIX* matrix, float x, float y, float z)
 }
 
 void Common_Shadow(XMMATRIX* matrix,
-                  XMVECTOR* lightpos,
-                  XMVECTOR* planepoint,
-                  XMVECTOR* planenor)
+    XMVECTOR* lightpos,
+    XMVECTOR* planepoint,
+    XMVECTOR* planenor)
 {
     // Create shadow matrix
     XMVECTOR lightPosition = *lightpos;
     XMVECTOR planePoint = *planepoint;
     XMVECTOR planeNormal = XMVector3Normalize(*planenor);
-    
+
     // Calculate plane equation (D component)
     float D = -XMVectorGetX(XMVector3Dot(planeNormal, planePoint));
-    
+
     // Create shadow matrix
     XMMATRIX shadowMatrix;
     float dot = XMVectorGetX(XMVector3Dot(planeNormal, lightPosition)) + D;
-    
+
     // Fill shadow matrix
     shadowMatrix.r[0] = XMVectorSet(
         dot - XMVectorGetX(planeNormal) * XMVectorGetX(lightPosition),
@@ -251,28 +247,28 @@ void Common_Shadow(XMMATRIX* matrix,
         -XMVectorGetX(planeNormal) * XMVectorGetZ(lightPosition),
         -XMVectorGetX(planeNormal) * XMVectorGetW(lightPosition)
     );
-    
+
     shadowMatrix.r[1] = XMVectorSet(
         -XMVectorGetY(planeNormal) * XMVectorGetX(lightPosition),
         dot - XMVectorGetY(planeNormal) * XMVectorGetY(lightPosition),
         -XMVectorGetY(planeNormal) * XMVectorGetZ(lightPosition),
         -XMVectorGetY(planeNormal) * XMVectorGetW(lightPosition)
     );
-    
+
     shadowMatrix.r[2] = XMVectorSet(
         -XMVectorGetZ(planeNormal) * XMVectorGetX(lightPosition),
         -XMVectorGetZ(planeNormal) * XMVectorGetY(lightPosition),
         dot - XMVectorGetZ(planeNormal) * XMVectorGetZ(lightPosition),
         -XMVectorGetZ(planeNormal) * XMVectorGetW(lightPosition)
     );
-    
+
     shadowMatrix.r[3] = XMVectorSet(
         -D * XMVectorGetX(lightPosition),
         -D * XMVectorGetY(lightPosition),
         -D * XMVectorGetZ(lightPosition),
         dot - D * XMVectorGetW(lightPosition)
     );
-    
+
     *matrix = XMMatrixMultiply(*matrix, shadowMatrix);
 }
 
@@ -306,25 +302,25 @@ void BuildRay(int nX, int nY, XMVECTOR* lpOrig, XMVECTOR* lpDir)
 }
 
 void IntersectPlane(XMVECTOR* lpOrg,
-                   XMVECTOR* lpDir,
-                   XMVECTOR* lpPlaneNor,
-                   XMVECTOR* lpPlaneVec,
-                   XMVECTOR* lpResult)
+    XMVECTOR* lpDir,
+    XMVECTOR* lpPlaneNor,
+    XMVECTOR* lpPlaneVec,
+    XMVECTOR* lpResult)
 {
     // Match original algorithm exactly
     // Calculate distance to plane (length of direction vector)
     float l = XMVectorGetX(XMVector3Length(*lpDir));
     XMVECTOR vec = XMVectorSubtract(*lpOrg, *lpPlaneVec);
     float dist = XMVectorGetX(XMVector3Dot(vec, *lpPlaneNor));
-    
+
     // Scale direction by distance
     vec = XMVectorScale(*lpDir, dist);
     vec = XMVectorAdd(*lpOrg, vec);
-    
+
     // Create plane and intersect line using DirectXMath equivalent
     XMVECTOR planeNormal = XMVector3Normalize(*lpPlaneNor);
     float D = -XMVectorGetX(XMVector3Dot(planeNormal, *lpPlaneVec));
-    
+
     // Calculate intersection using plane equation
     float denom = XMVectorGetX(XMVector3Dot(planeNormal, XMVectorSubtract(vec, *lpOrg)));
     if (fabsf(denom) > 0.0001f)
@@ -341,66 +337,66 @@ void IntersectPlane(XMVECTOR* lpOrg,
 // Modern C++ helper utilities implementation
 namespace CHUtils {
 
-std::string WideToMultiByte(const std::wstring& wstr)
-{
-    if (wstr.empty())
-        return std::string();
-        
-    int size = ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.size()),
-                                    nullptr, 0, nullptr, nullptr);
-    std::string result(size, 0);
-    ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.size()),
-                         &result[0], size, nullptr, nullptr);
-    return result;
-}
+    std::string WideToMultiByte(const std::wstring& wstr)
+    {
+        if (wstr.empty())
+            return std::string();
 
-std::wstring MultiByteToWide(const std::string& str)
-{
-    if (str.empty())
-        return std::wstring();
-        
-    int size = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()),
-                                    nullptr, 0);
-    std::wstring result(size, 0);
-    ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()),
-                         &result[0], size);
-    return result;
-}
+        int size = ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.size()),
+            nullptr, 0, nullptr, nullptr);
+        std::string result(size, 0);
+        ::WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), static_cast<int>(wstr.size()),
+            &result[0], size, nullptr, nullptr);
+        return result;
+    }
 
-std::string GetDirectoryFromPath(const std::string& filepath)
-{
-    size_t pos = filepath.find_last_of("/\\");
-    if (pos != std::string::npos)
-        return filepath.substr(0, pos);
-    return "";
-}
+    std::wstring MultiByteToWide(const std::string& str)
+    {
+        if (str.empty())
+            return std::wstring();
 
-std::string GetFilenameFromPath(const std::string& filepath)
-{
-    size_t pos = filepath.find_last_of("/\\");
-    if (pos != std::string::npos)
-        return filepath.substr(pos + 1);
-    return filepath;
-}
+        int size = ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()),
+            nullptr, 0);
+        std::wstring result(size, 0);
+        ::MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()),
+            &result[0], size);
+        return result;
+    }
 
-std::string GetExtensionFromPath(const std::string& filepath)
-{
-    size_t pos = filepath.find_last_of('.');
-    if (pos != std::string::npos)
-        return filepath.substr(pos + 1);
-    return "";
-}
+    std::string GetDirectoryFromPath(const std::string& filepath)
+    {
+        size_t pos = filepath.find_last_of("/\\");
+        if (pos != std::string::npos)
+            return filepath.substr(0, pos);
+        return "";
+    }
 
-size_t HashString(const std::string& str)
-{
-    return std::hash<std::string>{}(str);
-}
+    std::string GetFilenameFromPath(const std::string& filepath)
+    {
+        size_t pos = filepath.find_last_of("/\\");
+        if (pos != std::string::npos)
+            return filepath.substr(pos + 1);
+        return filepath;
+    }
 
-size_t HashStringCaseInsensitive(const std::string& str)
-{
-    std::string lowerStr = str;
-    std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
-    return std::hash<std::string>{}(lowerStr);
-}
+    std::string GetExtensionFromPath(const std::string& filepath)
+    {
+        size_t pos = filepath.find_last_of('.');
+        if (pos != std::string::npos)
+            return filepath.substr(pos + 1);
+        return "";
+    }
+
+    size_t HashString(const std::string& str)
+    {
+        return std::hash<std::string>{}(str);
+    }
+
+    size_t HashStringCaseInsensitive(const std::string& str)
+    {
+        std::string lowerStr = str;
+        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(), ::tolower);
+        return std::hash<std::string>{}(lowerStr);
+    }
 
 } // namespace CHUtils

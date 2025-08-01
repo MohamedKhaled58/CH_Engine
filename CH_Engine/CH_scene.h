@@ -57,7 +57,7 @@ void Scene_Clear(CHScene* lpScene);
 
 CH_CORE_DLL_API
 BOOL Scene_Load(CHScene** lpScene,
-               char* lpName,
+               const char* lpName,
                DWORD dwIndex);
 
 CH_CORE_DLL_API

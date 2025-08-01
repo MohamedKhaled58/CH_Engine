@@ -37,15 +37,20 @@
 
 using namespace DirectX;
 
+// Forward declarations to avoid circular dependencies
+struct CHDataFile;
+struct CHDataFileIndex;
+class CHDnFileManager;
+
 #ifdef _DEBUG
-    #define Assert(Expression) \
+#define Assert(Expression) \
         do { \
             if (!(Expression)) { \
                 AssertDialog(#Expression, __FILE__, __LINE__); \
             } \
         } while(0)
 #else
-    #define Assert(Expression) ((void)0)
+#define Assert(Expression) ((void)0)
 #endif
 
 // Modern C++ error handling and resource management
@@ -64,19 +69,19 @@ private:
 public:
     CHComPtr() = default;
     CHComPtr(T* p) : ptr(p) {}
-    
+
     CHComPtr(const CHComPtr& other) : ptr(other.ptr) {
         if (ptr) ptr->AddRef();
     }
-    
+
     CHComPtr(CHComPtr&& other) noexcept : ptr(other.ptr) {
         other.ptr = nullptr;
     }
-    
+
     ~CHComPtr() {
         if (ptr) ptr->Release();
     }
-    
+
     CHComPtr& operator=(const CHComPtr& other) {
         if (this != &other) {
             if (ptr) ptr->Release();
@@ -85,7 +90,7 @@ public:
         }
         return *this;
     }
-    
+
     CHComPtr& operator=(CHComPtr&& other) noexcept {
         if (this != &other) {
             if (ptr) ptr->Release();
@@ -94,22 +99,22 @@ public:
         }
         return *this;
     }
-    
+
     T* Get() const { return ptr; }
     T** GetAddressOf() { return &ptr; }
     T* operator->() const { return ptr; }
     T& operator*() const { return *ptr; }
     operator bool() const { return ptr != nullptr; }
-    
+
     void Reset() {
         if (ptr) {
             ptr->Release();
             ptr = nullptr;
         }
     }
-    
-    BOOL As(CHComPtr<T>* other) const {
-        return SUCCEEDED(ptr->QueryInterface(__uuidof(T), reinterpret_cast<void**>(other->GetAddressOf())));
+
+    HRESULT As(CHComPtr<T>* other) const {
+        return ptr->QueryInterface(__uuidof(T), reinterpret_cast<void**>(other->GetAddressOf()));
     }
 };
 
@@ -133,18 +138,21 @@ void SafeDeleteArray(T*& ptr) {
     ptr = nullptr;
 }
 
+// Compatibility macros for original code
+#define SafeDeleteEx(ptr) SafeDelete(ptr)
+
 #define CH_TRY(Expression) \
     do { \
-        BOOL success = SUCCEEDED(Expression); \
-        if (!success) { \
-            CH_OutputMessage(#Expression, FALSE, __FILE__, __LINE__); \
+        HRESULT hr = (Expression); \
+        if (FAILED(hr)) { \
+            CH_OutputMessage(#Expression, hr, __FILE__, __LINE__); \
         } \
     } while(0)
 
 // Error handling functions
 CH_CORE_DLL_API void AssertDialog(const char* expression, const char* file, int line);
 CH_CORE_DLL_API void ErrorMessage(const char* message);
-CH_CORE_DLL_API void CH_OutputMessage(const char* expression, BOOL result, const char* file, int line);
+CH_CORE_DLL_API void CH_OutputMessage(const char* expression, long result, const char* file, int line);
 
 // Utility functions (maintaining exact same signatures as original)
 CH_CORE_DLL_API int Random(int nMin, int nMax);
@@ -177,18 +185,18 @@ CH_CORE_DLL_API BOOL Common_IsEofRes();
 CH_CORE_DLL_API void Common_Translate(XMMATRIX* matrix, float x, float y, float z);
 CH_CORE_DLL_API void Common_Rotate(XMMATRIX* matrix, float x, float y, float z);
 CH_CORE_DLL_API void Common_Scale(XMMATRIX* matrix, float x, float y, float z);
-CH_CORE_DLL_API void Common_Shadow(XMMATRIX* matrix, 
-                                  XMVECTOR* lightpos,
-                                  XMVECTOR* planepoint,
-                                  XMVECTOR* planenor);
+CH_CORE_DLL_API void Common_Shadow(XMMATRIX* matrix,
+    XMVECTOR* lightpos,
+    XMVECTOR* planepoint,
+    XMVECTOR* planenor);
 
 // Ray and intersection utilities
 CH_CORE_DLL_API void BuildRay(int nX, int nY, XMVECTOR* lpOrig, XMVECTOR* lpDir);
 CH_CORE_DLL_API void IntersectPlane(XMVECTOR* lpOrg,
-                                   XMVECTOR* lpDir,
-                                   XMVECTOR* lpPlaneNor,
-                                   XMVECTOR* lpPlaneVec,
-                                   XMVECTOR* lpResult);
+    XMVECTOR* lpDir,
+    XMVECTOR* lpPlaneNor,
+    XMVECTOR* lpPlaneVec,
+    XMVECTOR* lpResult);
 
 // Thread safety
 extern CH_CORE_DLL_API CRITICAL_SECTION g_GlobalMutex;
@@ -198,12 +206,12 @@ namespace CHUtils {
     // String conversion utilities
     std::string WideToMultiByte(const std::wstring& wstr);
     std::wstring MultiByteToWide(const std::string& str);
-    
+
     // File path utilities
     std::string GetDirectoryFromPath(const std::string& filepath);
     std::string GetFilenameFromPath(const std::string& filepath);
     std::string GetExtensionFromPath(const std::string& filepath);
-    
+
     // Hash utilities for resource management
     size_t HashString(const std::string& str);
     size_t HashStringCaseInsensitive(const std::string& str);

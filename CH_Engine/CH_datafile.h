@@ -8,6 +8,8 @@
 #endif
 
 #include "CH_common.h"
+#include <mutex>
+#include <unordered_map>
 
 #define MAXDATAFILE 16
 

@@ -10,6 +10,7 @@
 #include "CH_common.h"
 #include "CH_texture.h"
 #include "CH_key.h"
+#include "CH_main.h"
 
 // Physics/Skeletal animation output vertex (for rendering)
 struct CHPhyOutVertex {
@@ -104,11 +105,11 @@ struct CHPhy {
     XMFLOAT2 uvstep;               // UV animation step
 
     // DirectX 11 specific data (internal use)
-    CHComPtr<ID3D11Buffer> normalVertexBuffer;
-    CHComPtr<ID3D11Buffer> alphaVertexBuffer;
-    CHComPtr<ID3D11Buffer> normalIndexBuffer;
-    CHComPtr<ID3D11Buffer> alphaIndexBuffer;
-    CHComPtr<ID3D11Buffer> boneMatrixBuffer;   // Constant buffer for bone matrices
+    CHComPtr<ID3D11Buffer> normalVertexBuffer = nullptr;
+    CHComPtr<ID3D11Buffer> alphaVertexBuffer = nullptr;
+    CHComPtr<ID3D11Buffer> normalIndexBuffer = nullptr;
+    CHComPtr<ID3D11Buffer> alphaIndexBuffer = nullptr;
+    CHComPtr<ID3D11Buffer> boneMatrixBuffer = nullptr;
     
     CHPhyOutVertex* lpOutVB;        // Processed output vertices
     UINT normalVertexStride;

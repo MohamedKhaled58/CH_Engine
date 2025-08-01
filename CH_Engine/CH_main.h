@@ -8,12 +8,16 @@
 #endif
 
 #include <windows.h>
+#include <winerror.h>  // For HRESULT definition
 #include <d3d11.h>
 #include <dxgi.h>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <algorithm>
 #include "CH_common.h"
+
+// Include all constants
+#include "CH_constants.h" // Or paste the constants directly here
 
 // DirectX 11 device and context management
 extern CH_CORE_DLL_API CHComPtr<ID3D11Device> g_D3DDevice;
@@ -58,7 +62,7 @@ struct CHViewport {
 // Global state (maintaining exact same variables as original)
 extern CH_CORE_DLL_API CHDisplayMode g_DisplayMode;
 extern CH_CORE_DLL_API HWND g_hWnd;
-extern CH_CORE_DLL_API CHViewport g_Viewport;
+extern CH_CORE_DLL_API D3D11_VIEWPORT g_Viewport;  // Changed from CHViewport to D3D11_VIEWPORT
 extern CH_CORE_DLL_API XMMATRIX g_ViewMatrix;
 extern CH_CORE_DLL_API XMMATRIX g_ProjectMatrix;
 extern CH_CORE_DLL_API CHPresentParameters g_Present;
@@ -78,19 +82,19 @@ extern CH_CORE_DLL_API CRITICAL_SECTION g_CriticalSection;
 // -3  = Alpha mode not supported
 CH_CORE_DLL_API
 int Init3D(HINSTANCE hInst,
-          const char* lpTitle,
-          DWORD dwWidth,
-          DWORD dwHeight,
-          BOOL bWindowed,
-          WNDPROC proc,
-          DWORD dwBackCount);
+    const char* lpTitle,
+    DWORD dwWidth,
+    DWORD dwHeight,
+    BOOL bWindowed,
+    WNDPROC proc,
+    DWORD dwBackCount);
 
 CH_CORE_DLL_API
 int Init3DEx(HWND hWnd,
-            DWORD dwWidth,
-            DWORD dwHeight,
-            BOOL bWindowed,
-            DWORD dwBackCount);
+    DWORD dwWidth,
+    DWORD dwHeight,
+    BOOL bWindowed,
+    DWORD dwBackCount);
 
 CH_CORE_DLL_API
 void Quit3D();
@@ -113,77 +117,13 @@ BOOL ClearBuffer(BOOL bZBuffer, BOOL bTarget, DWORD color);
 CH_CORE_DLL_API
 BOOL Flip();
 
-// DirectX 8 style render state management (translated to DX11 internally)
-enum CHRenderStateType {
-    CH_RS_AMBIENT = 1,
-    CH_RS_LIGHTING = 2,
-    CH_RS_CULLMODE = 3,
-    CH_RS_ZFUNC = 4,
-    CH_RS_EDGEANTIALIAS = 5,
-    CH_RS_MULTISAMPLEANTIALIAS = 6,
-    CH_RS_ALPHABLENDENABLE = 7,
-    CH_RS_SRCBLEND = 8,
-    CH_RS_DESTBLEND = 9,
-    CH_RS_ZENABLE = 10,
-    CH_RS_ZWRITEENABLE = 11
-};
-
-enum CHTextureStageStateType {
-    CH_TSS_MINFILTER = 1,
-    CH_TSS_MAGFILTER = 2,
-    CH_TSS_MIPFILTER = 3,
-    CH_TSS_COLOROP = 4,
-    CH_TSS_COLORARG1 = 5,
-    CH_TSS_COLORARG2 = 6,
-    CH_TSS_ALPHAOP = 7,
-    CH_TSS_ALPHAARG1 = 8,
-    CH_TSS_ALPHAARG2 = 9
-};
-
-enum CHCullMode {
-    CH_CULL_NONE = 1,
-    CH_CULL_CW = 2,
-    CH_CULL_CCW = 3
-};
-
-enum CHCompareFunc {
-    CH_CMP_NEVER = 1,
-    CH_CMP_LESS = 2,
-    CH_CMP_EQUAL = 3,
-    CH_CMP_LESSEQUAL = 4,
-    CH_CMP_GREATER = 5,
-    CH_CMP_NOTEQUAL = 6,
-    CH_CMP_GREATEREQUAL = 7,
-    CH_CMP_ALWAYS = 8
-};
-
-enum CHBlend {
-    CH_BLEND_ZERO = 1,
-    CH_BLEND_ONE = 2,
-    CH_BLEND_SRCCOLOR = 3,
-    CH_BLEND_INVSRCCOLOR = 4,
-    CH_BLEND_SRCALPHA = 5,
-    CH_BLEND_INVSRCALPHA = 6,
-    CH_BLEND_DESTALPHA = 7,
-    CH_BLEND_INVDESTALPHA = 8,
-    CH_BLEND_DESTCOLOR = 9,
-    CH_BLEND_INVDESTCOLOR = 10
-};
-
-enum CHTextureFilter {
-    CH_TEXF_NONE = 0,
-    CH_TEXF_POINT = 1,
-    CH_TEXF_LINEAR = 2,
-    CH_TEXF_ANISOTROPIC = 3
-};
-
 CH_CORE_DLL_API
 void SetRenderState(CHRenderStateType state, DWORD dwValue);
 
 CH_CORE_DLL_API
 void SetTextureStageState(DWORD dwStage,
-                         CHTextureStageStateType type,
-                         DWORD dwValue);
+    CHTextureStageStateType type,
+    DWORD dwValue);
 
 CH_CORE_DLL_API
 BOOL SetTexture(DWORD dwStage, ID3D11ShaderResourceView* lpTex);
@@ -201,45 +141,119 @@ namespace CHInternal {
     class RenderStateManager {
     private:
         struct RenderState {
-            CHComPtr<ID3D11RasterizerState> rasterizerState;
-            CHComPtr<ID3D11DepthStencilState> depthStencilState;
-            CHComPtr<ID3D11BlendState> blendState;
-            CHComPtr<ID3D11SamplerState> samplerStates[8];
-            DWORD currentStates[32];
-            DWORD currentTextureStates[8][16];
+            DWORD currentStates[512];          // Increased size for all states
+            DWORD currentTextureStates[8][64]; // Increased size for all texture states
         };
-        
+
         RenderState m_currentState;
-        CHComPtr<ID3D11RasterizerState> m_rasterizerStates[16];
-        CHComPtr<ID3D11DepthStencilState> m_depthStencilStates[16];
-        CHComPtr<ID3D11BlendState> m_blendStates[16];
-        CHComPtr<ID3D11SamplerState> m_samplerStates[8][16];
-        
+
+        // State conversion helpers
+        D3D11_BLEND ConvertBlendMode(DWORD chBlend);
+        D3D11_STENCIL_OP ConvertStencilOp(DWORD chStencilOp);
+        D3D11_COMPARISON_FUNC ConvertStencilFunc(DWORD chFunc);
+        D3D11_TEXTURE_ADDRESS_MODE ConvertTextureAddress(DWORD chAddress);
+        void ApplySamplerState(DWORD stage);
+
     public:
         void SetRenderState(CHRenderStateType state, DWORD value);
         void SetTextureStageState(DWORD stage, CHTextureStageStateType type, DWORD value);
         void ApplyStates();
         void Reset();
     };
-    
+
     extern RenderStateManager g_RenderStateManager;
-    
+
     // Shader management for compatibility
     class CompatibilityShaderManager {
     private:
         CHComPtr<ID3D11VertexShader> m_defaultVertexShader;
         CHComPtr<ID3D11PixelShader> m_defaultPixelShader;
+        CHComPtr<ID3D11PixelShader> m_simplePixelShader;
         CHComPtr<ID3D11InputLayout> m_defaultInputLayout;
         CHComPtr<ID3D11Buffer> m_constantBuffer;
-        
+        CHComPtr<ID3D11SamplerState> m_defaultSampler;
+
     public:
-        BOOL Initialize();
+        HRESULT Initialize();
         void SetDefaultShaders();
+        void SetLightmapShaders();
         void UpdateConstantBuffer(const XMMATRIX& world, const XMMATRIX& view, const XMMATRIX& proj);
         void Cleanup();
     };
-    
+
     extern CompatibilityShaderManager g_ShaderManager;
+
+    // DirectX 8 compatibility typedefs
+    typedef CHDisplayMode D3DDISPLAYMODE;
+    typedef CHDisplayMode CH_D3DDISPLAYMODE;
+
+    typedef CHViewport D3DVIEWPORT8;
+    typedef CHViewport CH_D3DVIEWPORT8;
+
+    typedef CHPresentParameters D3DPRESENT_PARAMETERS;
+    typedef CHPresentParameters CH_D3DPRESENT_PARAMETERS;
+
+    // DirectX 8 capabilities structure (simplified for compatibility)
+    struct CH_D3DCAPS8 {
+        DWORD DeviceType;
+        UINT AdapterOrdinal;
+        DWORD Caps;
+        DWORD Caps2;
+        DWORD Caps3;
+        DWORD PresentationIntervals;
+        DWORD CursorCaps;
+        DWORD DevCaps;
+        DWORD PrimitiveMiscCaps;
+        DWORD RasterCaps;
+        DWORD ZCmpCaps;
+        DWORD SrcBlendCaps;
+        DWORD DestBlendCaps;
+        DWORD AlphaCmpCaps;
+        DWORD ShadeCaps;
+        DWORD TextureCaps;
+        DWORD TextureFilterCaps;
+        DWORD CubeTextureFilterCaps;
+        DWORD VolumeTextureFilterCaps;
+        DWORD TextureAddressCaps;
+        DWORD VolumeTextureAddressCaps;
+        DWORD LineCaps;
+        DWORD MaxTextureWidth;
+        DWORD MaxTextureHeight;
+        DWORD MaxVolumeExtent;
+        DWORD MaxTextureRepeat;
+        DWORD MaxTextureAspectRatio;
+        DWORD MaxAnisotropy;
+        float MaxVertexW;
+        float GuardBandLeft;
+        float GuardBandTop;
+        float GuardBandRight;
+        float GuardBandBottom;
+        float ExtentsAdjust;
+        DWORD StencilCaps;
+        DWORD FVFCaps;
+        DWORD TextureOpCaps;
+        DWORD MaxTextureBlendStages;
+        DWORD MaxSimultaneousTextures;
+        DWORD VertexProcessingCaps;
+        DWORD MaxActiveLights;
+        DWORD MaxUserClipPlanes;
+        DWORD MaxVertexBlendMatrices;
+        DWORD MaxVertexBlendMatrixIndex;
+        float MaxPointSize;
+        DWORD MaxPrimitiveCount;
+        DWORD MaxVertexIndex;
+        DWORD MaxStreams;
+        DWORD MaxStreamStride;
+        DWORD VertexShaderVersion;
+        DWORD MaxVertexShaderConst;
+        DWORD PixelShaderVersion;
+        float MaxPixelShaderValue;
+    };
+
+    typedef CH_D3DCAPS8 D3DCAPS8;
+
+
 }
 
 #endif // _CH_main_h_
+

@@ -28,7 +28,7 @@ void Camera_Clear(CHCamera* lpCamera);
 
 CH_CORE_DLL_API
 BOOL Camera_Load(CHCamera** lpCamera,
-                char* lpName,
+                const char* lpName,
                 DWORD dwIndex);
 
 CH_CORE_DLL_API

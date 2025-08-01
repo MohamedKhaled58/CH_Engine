@@ -43,8 +43,8 @@ struct CHPtcl {
     XMMATRIX matrix;           // Transformation matrix
 
     // DirectX 11 specific data (internal use)
-    CHComPtr<ID3D11Buffer> vertexBuffer;
-    CHComPtr<ID3D11Buffer> indexBuffer;
+    CHComPtr<ID3D11Buffer> vertexBuffer = nullptr;
+    CHComPtr<ID3D11Buffer> indexBuffer = nullptr;
     UINT vertexStride;
     UINT vertexOffset;
 };
@@ -106,6 +106,20 @@ namespace CHPtclInternal {
     // File I/O
     BOOL LoadPtclFromFile(FILE* file, CHPtcl** ptcl, bool loadTextures);
     BOOL LoadPtclFromPack(HANDLE handle, CHPtcl** ptcl, bool loadTextures);
+
+
+    class ParticleShaderManager {
+    public:
+        HRESULT Initialize();
+        void SetParticleShaders();
+        void Cleanup();
+    private:
+        CHComPtr<ID3D11VertexShader> m_vertexShader;
+        CHComPtr<ID3D11PixelShader> m_pixelShader;
+        CHComPtr<ID3D11InputLayout> m_inputLayout;
+    };
+
+    extern ParticleShaderManager g_ParticleShaderManager;
 }
 
 // Compatibility types
