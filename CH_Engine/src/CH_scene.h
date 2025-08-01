@@ -93,8 +93,8 @@ namespace CHSceneInternal {
     void DisableLightmapRenderStates();
     
     // Buffer management
-    HRESULT CreateVertexBuffer(CHScene* scene);
-    HRESULT CreateIndexBuffer(CHScene* scene);
+    CH_CORE_DLL_API HRESULT CreateVertexBuffer(CHScene* scene);
+    CH_CORE_DLL_API HRESULT CreateIndexBuffer(CHScene* scene);
     void ReleaseBuffers(CHScene* scene);
     
     // Rendering utilities

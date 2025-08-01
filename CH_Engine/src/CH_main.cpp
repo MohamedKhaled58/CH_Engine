@@ -91,14 +91,36 @@ int Init3D(HINSTANCE hInst,
     mode.dmSize = sizeof(mode);
     EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &mode);
 
+    // Use proper window style for windowed mode
+    DWORD windowStyle = bWindowed ? WS_OVERLAPPEDWINDOW : WS_POPUP;
+    
+    // Calculate window position and size
+    int windowX, windowY, windowWidth, windowHeight;
+    
+    if (bWindowed) {
+        // For windowed mode, center the window and account for borders
+        RECT windowRect = { 0, 0, (LONG)dwWidth, (LONG)dwHeight };
+        AdjustWindowRect(&windowRect, windowStyle, FALSE);
+        windowWidth = windowRect.right - windowRect.left;
+        windowHeight = windowRect.bottom - windowRect.top;
+        windowX = (mode.dmPelsWidth - windowWidth) / 2;
+        windowY = (mode.dmPelsHeight - windowHeight) / 2;
+    } else {
+        // For fullscreen mode, use popup style
+        windowX = (mode.dmPelsWidth - dwWidth) / 2;
+        windowY = (mode.dmPelsHeight - dwHeight) / 2;
+        windowWidth = dwWidth;
+        windowHeight = dwHeight;
+    }
+    
     HWND hWnd = CreateWindowA(lpTitle,
                             lpTitle,
-                            WS_POPUP,
-                            (mode.dmPelsWidth - dwWidth) / 2,
-                            (mode.dmPelsHeight - dwHeight) / 2,
-                            dwWidth,
-                            dwHeight,
-                            GetDesktopWindow(),
+                            windowStyle,
+                            windowX,
+                            windowY,
+                            windowWidth,
+                            windowHeight,
+                            bWindowed ? NULL : GetDesktopWindow(),
                             NULL,
                             hInst,
                             NULL);
@@ -320,6 +342,19 @@ int Init3DEx(HWND hWnd,
 CH_CORE_DLL_API
 void Quit3D()
 {
+    // Cleanup all textures in global array first
+    for (int t = 0; t < TEX_MAX; t++)
+    {
+        if (g_lpTex[t] != nullptr)
+        {
+            // Only unload if the texture has a valid ID and is in the global array
+            if (g_lpTex[t]->nID >= 0 && g_lpTex[t]->nID < TEX_MAX)
+            {
+                Texture_Unload(&g_lpTex[t]);
+            }
+        }
+    }
+    
     CHInternal::g_CompatibilityShaderManager.Cleanup();
     CHSpriteInternal::g_SpriteShaderManager.Cleanup();
     CHInternal::g_RenderStateManager.Reset();
