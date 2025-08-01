@@ -123,23 +123,38 @@ void Texture_Unload(CHTexture** lpTex)
         return;
     }
 
-    if (--(*lpTex)->nDupCount <= 0)
+    CHTexture* tex = *lpTex;
+
+    // Decrement duplication counter
+    tex->nDupCount--;
+    if (tex->nDupCount <= 0)
     {
-        int id = (*lpTex)->nID;
+        int id = tex->nID;
 
-        delete[](*lpTex)->lpName;
-        (*lpTex)->lpTex.Reset();
-        (*lpTex)->lpSRV.Reset();
-        delete* lpTex;
-
-        if (id >= 0 && id < TEX_MAX)
+        // Unregister from global texture array before delete
+        if (id >= 0 && id < TEX_MAX && g_lpTex[id] == tex)
         {
             g_lpTex[id] = nullptr;
             g_dwTexCount--;
         }
+
+        // Clean up resources safely
+        if (tex->lpName)
+        {
+            delete[] tex->lpName;
+            tex->lpName = nullptr;
+        }
+
+        if (tex->lpSRV)
+            tex->lpSRV.Reset();
+
+        if (tex->lpTex)
+            tex->lpTex.Reset();
+
+        delete tex;
     }
 
-    *lpTex = nullptr;
+    *lpTex = nullptr;  // Clear user-provided pointer
     LeaveCriticalSection(&g_CriticalSection);
 }
 
@@ -436,8 +451,19 @@ namespace CHTextureInternal {
         texture->dxgiFormat = texDesc.Format;
         texture->d3dDesc = texDesc;
 
-        return TRUE;
-    }
+            return TRUE;
+}
+
+} // namespace CHTextureInternal
+
+// Export wrapper for CreateTextureFromPixels
+CH_CORE_DLL_API BOOL CreateTextureFromPixels(const DWORD* pixels, UINT width, UINT height, CHTexture* texture)
+{
+    return CHTextureInternal::CreateTextureFromPixels(pixels, width, height, texture);
+}
+
+// Internal implementation
+namespace CHTextureInternal {
 
     BOOL CreateEmptyTexture(UINT width, UINT height, DXGI_FORMAT format,
         UINT mipLevels, CHTexture* texture)

@@ -215,10 +215,20 @@ BOOL Camera_BuildView(CHCamera* lpCamera, BOOL bSet)
         return FALSE;
 
     XMVECTOR up = XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f);
-    g_ViewMatrix = CHCameraInternal::CreateLookAtMatrix(
-        lpCamera->lpFrom[lpCamera->nFrame],
-        lpCamera->lpTo[lpCamera->nFrame],
-        up);
+    XMVECTOR from = lpCamera->lpFrom[lpCamera->nFrame];
+    XMVECTOR to = lpCamera->lpTo[lpCamera->nFrame];
+    
+    // Check if camera positions are too close (which would cause zero direction vector)
+    XMVECTOR direction = XMVectorSubtract(to, from);
+    float directionLength = XMVectorGetX(XMVector3Length(direction));
+    
+    if (directionLength < 0.01f)
+    {
+        // If positions are too close, offset the target slightly
+        to = XMVectorAdd(from, XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f));
+    }
+    
+    g_ViewMatrix = CHCameraInternal::CreateLookAtMatrix(from, to, up);
 
     if (bSet)
     {
@@ -381,7 +391,86 @@ namespace CHCameraInternal {
 
 XMMATRIX CreateLookAtMatrix(const XMVECTOR& from, const XMVECTOR& to, const XMVECTOR& up)
 {
-    return XMMatrixLookAtLH(from, to, up);
+    // Completely custom look-at matrix calculation to avoid DirectX Math assertions
+    XMVECTOR safeFrom = from;
+    XMVECTOR safeTo = to;
+    XMVECTOR safeUp = up;
+    
+    // Ensure we have a valid direction vector
+    XMVECTOR direction = XMVectorSubtract(safeTo, safeFrom);
+    float directionLength = XMVectorGetX(XMVector3Length(direction));
+    
+    if (directionLength < 0.1f)
+    {
+        // Use a default direction if positions are too close
+        direction = XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f);
+    }
+    else
+    {
+        direction = XMVector3Normalize(direction);
+    }
+    
+    // Ensure we have a valid up vector
+    float upLength = XMVectorGetX(XMVector3Length(safeUp));
+    if (upLength < 0.1f)
+    {
+        safeUp = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    }
+    else
+    {
+        safeUp = XMVector3Normalize(safeUp);
+    }
+    
+    // Ensure up vector is not parallel to direction
+    float dotProduct = XMVectorGetX(XMVector3Dot(direction, safeUp));
+    if (fabs(dotProduct) > 0.9f)
+    {
+        safeUp = XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+        safeUp = XMVector3Normalize(safeUp);
+    }
+    
+    // Calculate right vector (cross product of direction and up)
+    XMVECTOR right = XMVector3Cross(direction, safeUp);
+    right = XMVector3Normalize(right);
+    
+    // Recalculate up vector to ensure orthogonality
+    safeUp = XMVector3Cross(right, direction);
+    safeUp = XMVector3Normalize(safeUp);
+    
+    // Build the look-at matrix manually (avoiding XMMatrixLookAtLH entirely)
+    XMMATRIX result;
+    
+    // Extract components for manual matrix construction
+    float dx = XMVectorGetX(direction);
+    float dy = XMVectorGetY(direction);
+    float dz = XMVectorGetZ(direction);
+    
+    float ux = XMVectorGetX(safeUp);
+    float uy = XMVectorGetY(safeUp);
+    float uz = XMVectorGetZ(safeUp);
+    
+    float rx = XMVectorGetX(right);
+    float ry = XMVectorGetY(right);
+    float rz = XMVectorGetZ(right);
+    
+    float px = XMVectorGetX(safeFrom);
+    float py = XMVectorGetY(safeFrom);
+    float pz = XMVectorGetZ(safeFrom);
+    
+    // Build the rotation part of the matrix
+    result.r[0] = XMVectorSet(rx, ry, rz, 0.0f);
+    result.r[1] = XMVectorSet(ux, uy, uz, 0.0f);
+    result.r[2] = XMVectorSet(-dx, -dy, -dz, 0.0f);
+    result.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    
+    // Calculate translation
+    float tx = -(rx * px + ry * py + rz * pz);
+    float ty = -(ux * px + uy * py + uz * pz);
+    float tz = -(-dx * px - dy * py - dz * pz);
+    
+    result.r[3] = XMVectorSet(tx, ty, tz, 1.0f);
+    
+    return result;
 }
 
 XMMATRIX CreatePerspectiveMatrix(float fov, float aspectRatio, float nearPlane, float farPlane)
@@ -403,7 +492,17 @@ void RotateVector(XMVECTOR& vector, const XMVECTOR& axis, float radians)
 void ClampVerticalRotation(XMVECTOR& target, const XMVECTOR& from, float minAngle, float maxAngle)
 {
     XMVECTOR up = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-    XMVECTOR direction = XMVector3Normalize(XMVectorSubtract(target, from));
+    XMVECTOR directionVector = XMVectorSubtract(target, from);
+    
+    // Check if direction vector is zero or very small
+    float directionLength = XMVectorGetX(XMVector3Length(directionVector));
+    if (directionLength < 0.001f)
+    {
+        // If target and from are the same, set a default direction
+        directionVector = XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f);
+    }
+    
+    XMVECTOR direction = XMVector3Normalize(directionVector);
     
     XMVECTOR dotProduct = XMVector3Dot(up, direction);
     float angle = acosf(XMVectorGetX(dotProduct));

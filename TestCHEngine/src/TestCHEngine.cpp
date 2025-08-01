@@ -1,376 +1,883 @@
-﻿// Enhanced 3D Test for CH Engine
-// File: Enhanced3DTest.cpp
+﻿// Enhanced CH Engine Test Application
+// File: CHEngineTest.cpp
+// Demonstrates all major engine systems with proper error handling
 
 #include <windows.h>
 #include <windowsx.h>
 #include <tchar.h>
-#include <winuser.h>
 #include <stdio.h>
 #include <math.h>
+#include <vector>
+#include <memory>
+
+// CH Engine includes
 #include "CH_main.h"
 #include "CH_sprite.h"
 #include "CH_scene.h"
 #include "CH_camera.h"
 #include "CH_texture.h"
+#include "CH_font.h"
+#include "CH_phy.h"
+#include "CH_ptcl.h"
 #include "CH_datafile.h"
 
-// Test scene data
-struct Test3DVertex {
-    float x, y, z;    // Position
-    float nx, ny, nz; // Normal
-    float u, v;       // Texture coordinates
-    float lu, lv;     // Lightmap coordinates (unused for this test)
+// Test framework
+class CHEngineTest {
+private:
+    // Test objects
+    std::unique_ptr<CHScene> m_testScene;
+    std::unique_ptr<CHCamera> m_camera;
+    std::unique_ptr<CHFont> m_debugFont;
+    std::vector<CHSprite*> m_sprites;
+
+    // Test state
+    float m_cameraDistance = 15.0f;
+    float m_cameraAngleX = 0.3f;
+    float m_cameraAngleY = 0.0f;
+    float m_rotationAngle = 0.0f;
+    bool m_wireframeMode = false;
+    bool m_showDebugInfo = true;
+
+    // Performance tracking
+    DWORD m_lastTime = 0;
+    DWORD m_frameCount = 0;
+    DWORD m_fps = 0;
+    DWORD m_lastFPSUpdate = 0;
+
+public:
+    bool Initialize(HWND hWnd);
+    void Update(float deltaTime);
+    void Render();
+    void Cleanup();
+    void HandleInput(WPARAM wParam);
+
+private:
+    bool CreateTestGeometry();
+    bool CreateTestCamera();
+    bool CreateDebugFont();
+    bool CreateTestSprites();
+    bool CreateProceduralTexture(CHTexture** texture);
+
+    void UpdateCamera();
+    void RenderDebugInfo();
+    void RunSystemTests();
+
+    // Safe resource creation with validation
+    template<typename T>
+    bool SafeCreate(T** resource, const char* name) {
+        if (!resource) {
+            printf("Error: Null resource pointer for %s\n", name);
+            return false;
+        }
+
+        *resource = new T;
+        if (!*resource) {
+            printf("Error: Failed to allocate %s\n", name);
+            return false;
+        }
+
+        return true;
+    }
 };
 
-// Forward declarations
-bool CreateProceduralTexture(CHTexture** texture);
-bool CreateTestCamera(CHCamera** camera);
-bool CreateInfoSprite();
-void UpdateCamera();
-void RenderDebugInfo();
-void RunConsoleTests();
-void PrintDirectXInfo();
-void ValidateRenderingPipeline();
-bool CreateTestCubeAdvanced(CHScene** scene);
-bool CreateTestPrimitives(CHScene** scene);
-bool ValidateEngine();
+// Global test instance
+CHEngineTest g_Test;
 
-// Global test variables
-CHScene* g_TestScene = nullptr;
-CHCamera* g_TestCamera = nullptr;
-CHSprite* g_InfoSprite = nullptr;
-CHTexture* g_TestTexture = nullptr;
+bool CHEngineTest::Initialize(HWND hWnd) {
+    printf("Initializing CH Engine Test...\n");
 
-// Camera control
-float g_CameraDistance = 15.0f;
-float g_CameraAngleX = 0.3f;  // Start with slight downward angle
-float g_CameraAngleY = 0.0f;
-bool g_ShowInfo = true;
-bool g_WireframeMode = true;
-DWORD g_LastTime = 0;
-float g_RotationAngle = 0.0f;
+    // Initialize timing
+    m_lastTime = static_cast<DWORD>(GetTickCount64());
+    m_lastFPSUpdate = m_lastTime;
 
-// Test geometry creation
-bool CreateTestCube(CHScene** scene)
-{
-    *scene = new CHScene;
-    Scene_Clear(*scene);
+    // Create test content with validation
+    if (!CreateTestGeometry()) {
+        printf("✗ Failed to create test geometry\n");
+        return false;
+    }
 
-    // Set scene name
-    const char* sceneName = "Procedural Test Cube";
+    if (!CreateTestCamera()) {
+        printf("✗ Failed to create test camera\n");
+        return false;
+    }
+
+    if (!CreateDebugFont()) {
+        printf("Warning: Failed to create debug font\n");
+        // Non-critical, continue
+    }
+
+    if (!CreateTestSprites()) {
+        printf("Warning: Failed to create test sprites\n");
+        // Non-critical, continue
+    }
+
+    // Run system validation tests
+    RunSystemTests();
+
+    printf("✓ CH Engine Test initialized successfully\n");
+    return true;
+}
+
+bool CHEngineTest::CreateTestGeometry() {
+    printf("Creating test geometry...\n");
+
+    // Create enhanced cube with better normals and UVs
+    CHScene* scene = new CHScene;
+    Scene_Clear(scene);
+
+    // Set scene name safely
+    const char* sceneName = "Enhanced Test Cube";
     size_t nameLen = strlen(sceneName) + 1;
-    (*scene)->lpName = new char[nameLen];
-    strcpy_s((*scene)->lpName, nameLen, sceneName);
+    scene->lpName = new char[nameLen];
+    strcpy_s(scene->lpName, nameLen, sceneName);
 
-    // Create cube vertices (6 faces, 4 vertices each = 24 vertices)
-    (*scene)->dwVecCount = 24;
-    (*scene)->lpVB = new CHSceneVertex[24];
+    // Create cube vertices (24 vertices for proper face normals)
+    scene->dwVecCount = 24;
+    scene->lpVB = new CHSceneVertex[24];
 
-    // Cube size
     float size = 2.0f;
 
     // Front face (Z+)
-    (*scene)->lpVB[0] = { -size, -size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[1] = { size, -size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[2] = { size,  size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[3] = { -size,  size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[0] = { -size, -size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[1] = { size, -size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[2] = { size,  size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[3] = { -size,  size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Back face (Z-)
-    (*scene)->lpVB[4] = { size, -size, -size,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[5] = { -size, -size, -size,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[6] = { -size,  size, -size,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[7] = { size,  size, -size,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[4] = { size, -size, -size,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[5] = { -size, -size, -size,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[6] = { -size,  size, -size,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[7] = { size,  size, -size,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Left face (X-)
-    (*scene)->lpVB[8] = { -size, -size, -size, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[9] = { -size, -size,  size, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[10] = { -size,  size,  size, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[11] = { -size,  size, -size, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[8] = { -size, -size, -size, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[9] = { -size, -size,  size, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[10] = { -size,  size,  size, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[11] = { -size,  size, -size, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Right face (X+)
-    (*scene)->lpVB[12] = { size, -size,  size,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[13] = { size, -size, -size,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[14] = { size,  size, -size,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[15] = { size,  size,  size,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[12] = { size, -size,  size,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[13] = { size, -size, -size,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[14] = { size,  size, -size,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[15] = { size,  size,  size,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Top face (Y+)
-    (*scene)->lpVB[16] = { -size,  size,  size,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[17] = { size,  size,  size,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[18] = { size,  size, -size,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[19] = { -size,  size, -size,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[16] = { -size,  size,  size,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[17] = { size,  size,  size,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[18] = { size,  size, -size,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[19] = { -size,  size, -size,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
     // Bottom face (Y-)
-    (*scene)->lpVB[20] = { -size, -size, -size,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[21] = { size, -size, -size,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[22] = { size, -size,  size,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[23] = { -size, -size,  size,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[20] = { -size, -size, -size,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[21] = { size, -size, -size,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f };
+    scene->lpVB[22] = { size, -size,  size,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+    scene->lpVB[23] = { -size, -size,  size,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
-    // Create cube indices (12 triangles, 36 indices)
-    (*scene)->dwTriCount = 12;
-    (*scene)->lpIB = new WORD[36];
+    // Create indices (12 triangles, 36 indices)
+    scene->dwTriCount = 12;
+    scene->lpIB = new WORD[36];
 
-    // Front face
-    (*scene)->lpIB[0] = 0; (*scene)->lpIB[1] = 1; (*scene)->lpIB[2] = 2;
-    (*scene)->lpIB[3] = 0; (*scene)->lpIB[4] = 2; (*scene)->lpIB[5] = 3;
+    WORD indices[] = {
+        // Front face
+        0, 1, 2,   0, 2, 3,
+        // Back face  
+        4, 5, 6,   4, 6, 7,
+        // Left face
+        8, 9, 10,  8, 10, 11,
+        // Right face
+        12, 13, 14, 12, 14, 15,
+        // Top face
+        16, 17, 18, 16, 18, 19,
+        // Bottom face
+        20, 21, 22, 20, 22, 23
+    };
 
-    // Back face
-    (*scene)->lpIB[6] = 4; (*scene)->lpIB[7] = 5; (*scene)->lpIB[8] = 6;
-    (*scene)->lpIB[9] = 4; (*scene)->lpIB[10] = 6; (*scene)->lpIB[11] = 7;
-
-    // Left face
-    (*scene)->lpIB[12] = 8; (*scene)->lpIB[13] = 9; (*scene)->lpIB[14] = 10;
-    (*scene)->lpIB[15] = 8; (*scene)->lpIB[16] = 10; (*scene)->lpIB[17] = 11;
-
-    // Right face
-    (*scene)->lpIB[18] = 12; (*scene)->lpIB[19] = 13; (*scene)->lpIB[20] = 14;
-    (*scene)->lpIB[21] = 12; (*scene)->lpIB[22] = 14; (*scene)->lpIB[23] = 15;
-
-    // Top face
-    (*scene)->lpIB[24] = 16; (*scene)->lpIB[25] = 17; (*scene)->lpIB[26] = 18;
-    (*scene)->lpIB[27] = 16; (*scene)->lpIB[28] = 18; (*scene)->lpIB[29] = 19;
-
-    // Bottom face
-    (*scene)->lpIB[30] = 20; (*scene)->lpIB[31] = 21; (*scene)->lpIB[32] = 22;
-    (*scene)->lpIB[33] = 20; (*scene)->lpIB[34] = 22; (*scene)->lpIB[35] = 23;
+    memcpy(scene->lpIB, indices, sizeof(indices));
 
     // Create procedural texture
-    if (!CreateProceduralTexture(&g_TestTexture))
-    {
-        printf("Warning: Failed to create procedural texture\n");
-        (*scene)->nTex = -1;
+    CHTexture* texture = nullptr;
+    if (CreateProceduralTexture(&texture)) {
+        // Store texture in global array
+        for (int i = 0; i < TEX_MAX; i++) {
+            if (g_lpTex[i] == nullptr) {
+                g_lpTex[i] = texture;
+                texture->nID = i;
+                scene->nTex = i;
+                g_dwTexCount++;
+                break;
+            }
+        }
+        printf("✓ Texture created and assigned to slot %d\n", scene->nTex);
     }
-    else
-    {
-        // For now, just use texture ID 0 since we're not managing it in global array
-        (*scene)->nTex = 0;
+    else {
+        scene->nTex = -1;
+        printf("Warning: No texture assigned\n");
     }
 
-    // Create DirectX 11 buffers
-    if (FAILED(CHSceneInternal::CreateVertexBuffer(*scene)) ||
-        FAILED(CHSceneInternal::CreateIndexBuffer(*scene)))
-    {
-        printf("Error: Failed to create DirectX 11 buffers\n");
-        Scene_Unload(scene);
+    // Create DirectX 11 buffers with error checking
+    HRESULT hr = CHSceneInternal::CreateVertexBuffer(scene);
+    if (FAILED(hr)) {
+        printf("✗ Vertex buffer creation failed (HRESULT: 0x%08X)\n", hr);
+        Scene_Unload(&scene);
         return false;
     }
 
-    printf("✓ Test cube created successfully\n");
-    printf("  Vertices: %d, Triangles: %d\n", (*scene)->dwVecCount, (*scene)->dwTriCount);
-    printf("  Texture ID: %d\n", (*scene)->nTex);
+    hr = CHSceneInternal::CreateIndexBuffer(scene);
+    if (FAILED(hr)) {
+        printf("✗ Index buffer creation failed (HRESULT: 0x%08X)\n", hr);
+        Scene_Unload(&scene);
+        return false;
+    }
+
+    m_testScene.reset(scene);
+    printf("✓ Test geometry created successfully\n");
+    printf("  Vertices: %d, Triangles: %d\n", scene->dwVecCount, scene->dwTriCount);
 
     return true;
 }
 
-// Create a simple procedural texture
-bool CreateProceduralTexture(CHTexture** texture)
-{
-    const UINT width = 256;
-    const UINT height = 256;
+bool CHEngineTest::CreateTestCamera() {
+    printf("Creating test camera...\n");
 
-    // Use the existing Texture_Create function
-    if (!Texture_Create(texture, width, height, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED))
-    {
-        printf("Failed to create texture with Texture_Create\n");
-        return false;
-    }
-
-    // Don't manually allocate texture name - let the texture system handle it
-    // The Texture_Create function should handle memory management properly
-    printf("✓ Procedural texture created using Texture_Create\n");
-    return true;
-}
-
-// Create test camera
-bool CreateTestCamera(CHCamera** camera)
-{
-    *camera = new CHCamera;
-    Camera_Clear(*camera);
+    CHCamera* camera = new CHCamera;
+    Camera_Clear(camera);
 
     // Set camera parameters
-    (*camera)->fNear = 0.1f;
-    (*camera)->fFar = 1000.0f;
-    (*camera)->fFov = CHCameraMath::ToRadian(60.0f);
-    (*camera)->dwFrameCount = 1;
-    (*camera)->nFrame = 0;
+    camera->fNear = 0.1f;
+    camera->fFar = 1000.0f;
+    camera->fFov = CHCameraMath::ToRadian(60.0f);
+    camera->dwFrameCount = 1;
+    camera->nFrame = 0;
 
-    // Allocate position arrays safely
-    (*camera)->lpFrom = new XMVECTOR[1];
-    (*camera)->lpTo = new XMVECTOR[1];
+    // Allocate and initialize position arrays
+    camera->lpFrom = new XMVECTOR[1];
+    camera->lpTo = new XMVECTOR[1];
 
-    // Set initial position
-    (*camera)->lpFrom[0] = XMVectorSet(0.0f, 5.0f, g_CameraDistance, 1.0f);
-    (*camera)->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    if (!camera->lpFrom || !camera->lpTo) {
+        printf("✗ Failed to allocate camera position arrays\n");
+        Camera_Unload(&camera);
+        return false;
+    }
 
+    // Set guaranteed safe camera position (bypass UpdateCamera to avoid any issues)
+    camera->lpFrom[0] = XMVectorSet(10.0f, 5.0f, 10.0f, 1.0f);
+    camera->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    printf("✓ Camera position set to safe values\n");
+
+    m_camera.reset(camera);
     printf("✓ Test camera created\n");
     return true;
 }
 
-// Update camera based on user input
-void UpdateCamera()
-{
-    if (!g_TestCamera || !g_TestCamera->lpFrom || !g_TestCamera->lpTo)
-        return;
+bool CHEngineTest::CreateDebugFont() {
+    printf("Creating debug font...\n");
 
-    // Calculate camera position using spherical coordinates
-    float x = g_CameraDistance * sinf(g_CameraAngleY) * cosf(g_CameraAngleX);
-    float y = g_CameraDistance * sinf(g_CameraAngleX);
-    float z = g_CameraDistance * cosf(g_CameraAngleY) * cosf(g_CameraAngleX);
+    CHFont* font = nullptr;
+    if (!Font_Create(&font, "Arial", 16)) {
+        printf("Warning: Font creation failed\n");
+        return false;
+    }
 
-    // Update camera position
-    g_TestCamera->lpFrom[0] = XMVectorSet(x, y, z, 1.0f);
-    g_TestCamera->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+    m_debugFont.reset(font);
+    printf("✓ Debug font created\n");
+    return true;
 }
 
-// Create info display sprite
-bool CreateInfoSprite()
-{
-    // Create a small colored texture for UI using existing system
-    CHTexture* infoTexture = nullptr;
-    if (!Texture_Create(&infoTexture, 16, 16, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED))
-    {
-        printf("Warning: Failed to create info texture\n");
+bool CHEngineTest::CreateTestSprites() {
+    printf("Creating test sprites...\n");
+
+    // Create a simple colored sprite for UI
+    CHSprite* infoSprite = nullptr;
+    CHTexture* spriteTexture = nullptr;
+
+    // Create a small texture for the sprite
+    if (!Texture_Create(&spriteTexture, 32, 32, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED)) {
+        printf("Warning: Failed to create sprite texture\n");
         return false;
     }
 
     // Create sprite
-    g_InfoSprite = new CHSprite;
-    Sprite_Clear(g_InfoSprite);
-    g_InfoSprite->lpTex = infoTexture;
+    if (!Sprite_Create(&infoSprite, 32, 32, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED)) {
+        printf("Warning: Failed to create sprite\n");
+        Texture_Unload(&spriteTexture);
+        return false;
+    }
 
-    // Position in top-left corner
-    Sprite_SetCoor(g_InfoSprite, nullptr, 10, 10, 200, 16);
-    Sprite_SetColor(g_InfoSprite, 128, 0, 255, 0); // Semi-transparent green
+    infoSprite->lpTex = spriteTexture;
 
-    printf("✓ Info sprite created\n");
+    // Position sprite in top-left corner
+    Sprite_SetCoor(infoSprite, nullptr, 10, 10, 200, 20);
+    Sprite_SetColor(infoSprite, 180, 0, 255, 0); // Semi-transparent green
+
+    m_sprites.push_back(infoSprite);
+    printf("✓ Test sprites created\n");
     return true;
 }
 
-// Render debug information
-void RenderDebugInfo()
-{
-    if (!g_ShowInfo)
-        return;
+bool CHEngineTest::CreateProceduralTexture(CHTexture** texture) {
+    if (!texture) return false;
 
-    // This would render text in a real implementation
-    // For now, just render the info sprite as a placeholder
-    if (g_InfoSprite)
-    {
-        Sprite_Prepare();
-        Sprite_Draw(g_InfoSprite, 1); // Additive blending
+    const UINT width = 128;
+    const UINT height = 128;
+
+    // Create texture using engine's function
+    if (!Texture_Create(texture, width, height, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED)) {
+        printf("✗ Texture_Create failed\n");
+        return false;
+    }
+
+    // Create procedural pattern using internal functions
+    std::vector<DWORD> pixels(width * height);
+
+    for (UINT y = 0; y < height; y++) {
+        for (UINT x = 0; x < width; x++) {
+            // Create a checkerboard pattern with colors
+            bool checker = ((x / 16) + (y / 16)) % 2 == 0;
+            DWORD color;
+
+            if (checker) {
+                // White with some variation
+                BYTE intensity = 200 + (x + y) % 56;
+                color = 0xFF000000 | (intensity << 16) | (intensity << 8) | intensity;
+            }
+            else {
+                // Colored squares
+                BYTE r = (x * 255) / width;
+                BYTE g = (y * 255) / height;
+                BYTE b = ((x + y) * 255) / (width + height);
+                color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+
+            pixels[y * width + x] = color;
+        }
+    }
+
+    // Create texture using existing API
+    if (!Texture_Create(texture, width, height, 1, CH_FMT_A8R8G8B8, CH_POOL_MANAGED)) {
+        printf("✗ Failed to create texture\n");
+        return false;
+    }
+
+    // Upload pixel data using DirectX 11 UpdateSubresource
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    HRESULT hr = g_D3DContext->Map((*texture)->lpTex.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+    if (SUCCEEDED(hr)) {
+        // Copy pixel data
+        DWORD* destPixels = static_cast<DWORD*>(mappedResource.pData);
+        for (UINT y = 0; y < height; y++) {
+            memcpy(destPixels + y * (mappedResource.RowPitch / 4), 
+                   pixels.data() + y * width, 
+                   width * sizeof(DWORD));
+        }
+        g_D3DContext->Unmap((*texture)->lpTex.Get(), 0);
+    } else {
+        printf("✗ Failed to upload texture pixels\n");
+        Texture_Unload(texture);
+        return false;
+    }
+
+    printf("✓ Procedural texture created (%dx%d)\n", width, height);
+    return true;
+}
+
+void CHEngineTest::UpdateCamera() {
+    if (!m_camera || !m_camera->lpFrom || !m_camera->lpTo) return;
+
+    // Ensure minimum camera distance to prevent zero direction vectors
+    float safeDistance = std::max(m_cameraDistance, 5.0f); // Much larger minimum
+    
+    // Calculate camera position using spherical coordinates
+    float x = safeDistance * sinf(m_cameraAngleY) * cosf(m_cameraAngleX);
+    float y = safeDistance * sinf(m_cameraAngleX);
+    float z = safeDistance * cosf(m_cameraAngleY) * cosf(m_cameraAngleX);
+
+    // Additional safety check: ensure we're not too close to origin
+    float distanceFromOrigin = sqrtf(x*x + y*y + z*z);
+    if (distanceFromOrigin < 1.0f) {
+        // Force a safe position
+        x = 5.0f;
+        y = 0.0f;
+        z = 0.0f;
+    }
+
+    // Update camera position
+    m_camera->lpFrom[0] = XMVectorSet(x, y, z, 1.0f);
+    m_camera->lpTo[0] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+}
+
+void CHEngineTest::Update(float deltaTime) {
+    // Update rotation
+    m_rotationAngle += deltaTime * 0.5f; // Slow rotation
+
+    // Update camera
+    UpdateCamera();
+
+    // Update FPS counter
+    m_frameCount++;
+    DWORD currentTime = static_cast<DWORD>(GetTickCount64());
+    if (currentTime - m_lastFPSUpdate >= 1000) {
+        m_fps = m_frameCount;
+        m_frameCount = 0;
+        m_lastFPSUpdate = currentTime;
+
+        // Update window title
+        char titleText[256];
+        sprintf_s(titleText, "CH Engine Test - FPS: %d | Dist: %.1f | Tris: %d",
+            m_fps, m_cameraDistance,
+            m_testScene ? m_testScene->dwTriCount : 0);
+        SetWindowTextA(g_hWnd, titleText);
     }
 }
 
+void CHEngineTest::Render() {
+    // Begin rendering
+    if (!Begin3D()) {
+        printf("Warning: Begin3D() failed\n");
+        return;
+    }
+
+    // Clear buffers with a nice gradient color
+    DWORD clearColor = 0xFF001122; // Dark blue-red
+    ClearBuffer(TRUE, TRUE, clearColor);
+
+    // Set up camera matrices
+    if (m_camera) {
+        if (!Camera_BuildView(m_camera.get(), TRUE)) {
+            printf("Warning: Camera_BuildView failed\n");
+        }
+        if (!Camera_BuildProject(m_camera.get(), TRUE)) {
+            printf("Warning: Camera_BuildProject failed\n");
+        }
+    }
+
+    // Set wireframe mode if enabled
+    if (m_wireframeMode) {
+        // Note: Implement wireframe support in render state manager
+        SetRenderState(CH_RS_FILLMODE, CH_FILL_WIREFRAME);
+    }
+    else {
+        SetRenderState(CH_RS_FILLMODE, CH_FILL_SOLID);
+    }
+
+    // Render 3D scene
+    if (m_testScene) {
+        // Apply rotation transform
+        XMMATRIX rotationMatrix = XMMatrixRotationY(m_rotationAngle);
+        Scene_Muliply(m_testScene.get(), &rotationMatrix);
+
+        // Prepare and draw scene
+        Scene_Prepare();
+        if (!Scene_Draw(m_testScene.get())) {
+            static bool errorReported = false;
+            if (!errorReported) {
+                printf("Warning: Scene_Draw failed\n");
+                errorReported = true;
+            }
+        }
+    }
+
+    // Render 2D overlay
+    if (m_showDebugInfo) {
+        RenderDebugInfo();
+    }
+
+    // End rendering
+    End3D();
+
+    // Present frame
+    if (!Flip()) {
+        static bool errorReported = false;
+        if (!errorReported) {
+            printf("Warning: Flip() failed\n");
+            errorReported = true;
+        }
+    }
+}
+
+void CHEngineTest::RenderDebugInfo() {
+    // Render sprites
+    if (!m_sprites.empty()) {
+        Sprite_Prepare();
+        for (CHSprite* sprite : m_sprites) {
+            if (sprite) {
+                Sprite_Draw(sprite, 1); // Additive blending
+            }
+        }
+    }
+
+    // Render debug text if font is available
+    if (m_debugFont) {
+        Font_Prepare();
+
+        char debugText[256];
+        sprintf_s(debugText, "FPS: %d | Camera: %.1f,%.1f,%.1f",
+            m_fps, m_cameraDistance, m_cameraAngleX, m_cameraAngleY);
+
+        Font_Draw(m_debugFont.get(), 10.0f, 40.0f, 0xFFFFFF00, debugText);
+    }
+}
+
+void CHEngineTest::HandleInput(WPARAM wParam) {
+    switch (wParam) {
+    case VK_ESCAPE:
+        PostQuitMessage(0);
+        break;
+
+    case VK_F1:
+        m_showDebugInfo = !m_showDebugInfo;
+        printf("Debug info: %s\n", m_showDebugInfo ? "ON" : "OFF");
+        break;
+
+    case VK_F2:
+        m_wireframeMode = !m_wireframeMode;
+        printf("Wireframe: %s\n", m_wireframeMode ? "ON" : "OFF");
+        break;
+
+    case VK_UP:
+        m_cameraAngleX += 0.1f;
+        if (m_cameraAngleX > 1.5f) m_cameraAngleX = 1.5f;
+        break;
+
+    case VK_DOWN:
+        m_cameraAngleX -= 0.1f;
+        if (m_cameraAngleX < -1.5f) m_cameraAngleX = -1.5f;
+        break;
+
+    case VK_LEFT:
+        m_cameraAngleY -= 0.1f;
+        break;
+
+    case VK_RIGHT:
+        m_cameraAngleY += 0.1f;
+        break;
+
+    case VK_ADD:
+    case VK_OEM_PLUS:
+        m_cameraDistance -= 1.0f;
+        if (m_cameraDistance < 2.0f) m_cameraDistance = 2.0f;
+        break;
+
+    case VK_SUBTRACT:
+    case VK_OEM_MINUS:
+        m_cameraDistance += 1.0f;
+        if (m_cameraDistance > 50.0f) m_cameraDistance = 50.0f;
+        break;
+
+    case 'R':
+        // Reset camera
+        m_cameraDistance = 15.0f;
+        m_cameraAngleX = 0.3f;
+        m_cameraAngleY = 0.0f;
+        printf("Camera reset\n");
+        break;
+
+    case 'P':
+        // Print current state
+        printf("\n=== Engine State ===\n");
+        printf("FPS: %d\n", m_fps);
+        printf("Camera Distance: %.2f\n", m_cameraDistance);
+        printf("Camera Angles: %.2f, %.2f\n", m_cameraAngleX, m_cameraAngleY);
+        printf("Rotation: %.2f rad\n", m_rotationAngle);
+        printf("Wireframe: %s\n", m_wireframeMode ? "ON" : "OFF");
+        if (m_testScene) {
+            printf("Scene: %d vertices, %d triangles\n",
+                m_testScene->dwVecCount, m_testScene->dwTriCount);
+        }
+        printf("Textures loaded: %d/%d\n", g_dwTexCount, TEX_MAX);
+        printf("==================\n\n");
+        break;
+
+    case 'T':
+        // Run runtime tests
+        printf("Running runtime validation tests...\n");
+        RunSystemTests();
+        break;
+    }
+}
+
+void CHEngineTest::RunSystemTests() {
+    printf("\n=== System Validation Tests ===\n");
+
+    // Test 1: DirectX objects validation
+    printf("1. DirectX Objects:\n");
+    bool dx11Valid = true;
+    if (!g_D3DDevice) { printf("   ✗ Device missing\n"); dx11Valid = false; }
+    if (!g_D3DContext) { printf("   ✗ Context missing\n"); dx11Valid = false; }
+    if (!g_SwapChain) { printf("   ✗ SwapChain missing\n"); dx11Valid = false; }
+    if (!g_RenderTargetView) { printf("   ✗ RenderTarget missing\n"); dx11Valid = false; }
+    if (!g_DepthStencilView) { printf("   ✗ DepthStencil missing\n"); dx11Valid = false; }
+
+    if (dx11Valid) printf("   ✓ All DirectX 11 objects valid\n");
+
+    // Test 2: Math utilities
+    printf("2. Math System:\n");
+    float testRad = CHCameraMath::ToRadian(90.0f);
+    float testDeg = CHCameraMath::ToDegree(testRad);
+    bool mathValid = (abs(testDeg - 90.0f) < 0.001f);
+    printf("   %s Math conversion (90° -> %.3f rad -> %.3f°)\n",
+        mathValid ? "✓" : "✗", testRad, testDeg);
+
+    // Test 3: Random number generator
+    printf("3. Random System:\n");
+    int rand1 = Random(1, 100);
+    int rand2 = Random(1, 100);
+    bool randValid = (rand1 != rand2 && rand1 >= 1 && rand1 <= 100);
+    printf("   %s Random generation (%d, %d)\n",
+        randValid ? "✓" : "✗", rand1, rand2);
+
+    // Test 4: Texture system
+    printf("4. Texture System:\n");
+    printf("   Loaded textures: %d/%d\n", g_dwTexCount, TEX_MAX);
+    bool texValid = (g_dwTexCount > 0);
+    printf("   %s Texture management\n", texValid ? "✓" : "✗");
+
+    // Test 5: Scene system
+    printf("5. Scene System:\n");
+    if (m_testScene) {
+        bool sceneValid = (m_testScene->dwVecCount > 0 &&
+            m_testScene->dwTriCount > 0 &&
+            m_testScene->lpVB != nullptr &&
+            m_testScene->lpIB != nullptr);
+        printf("   %s Scene data integrity\n", sceneValid ? "✓" : "✗");
+        printf("   %s DirectX buffers\n",
+            (m_testScene->vertexBuffer && m_testScene->indexBuffer) ? "✓" : "✗");
+    }
+    else {
+        printf("   ✗ No test scene loaded\n");
+    }
+
+    // Test 6: Camera system
+    printf("6. Camera System:\n");
+    if (m_camera) {
+        bool cameraValid = (m_camera->lpFrom != nullptr &&
+            m_camera->lpTo != nullptr &&
+            m_camera->dwFrameCount > 0);
+        printf("   %s Camera data integrity\n", cameraValid ? "✓" : "✗");
+
+        // Test matrix building
+        bool viewValid = Camera_BuildView(m_camera.get(), FALSE);
+        bool projValid = Camera_BuildProject(m_camera.get(), FALSE);
+        printf("   %s View matrix build\n", viewValid ? "✓" : "✗");
+        printf("   %s Projection matrix build\n", projValid ? "✓" : "✗");
+    }
+    else {
+        printf("   ✗ No camera loaded\n");
+    }
+
+    // Test 7: Render state system
+    printf("7. Render State System:\n");
+    SetRenderState(CH_RS_CULLMODE, CH_CULL_CW);
+    SetRenderState(CH_RS_ZENABLE, TRUE);
+    SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
+    printf("   ✓ Render state operations completed\n");
+
+    // Test 8: Basic rendering test
+    printf("8. Rendering Test:\n");
+    float testColor[4] = { 0.5f, 0.0f, 0.5f, 1.0f };
+    g_D3DContext->ClearRenderTargetView(g_RenderTargetView.Get(), testColor);
+    printf("   ✓ Clear operations successful\n");
+
+    printf("===============================\n\n");
+}
+
+void CHEngineTest::Cleanup() {
+    printf("Cleaning up test resources...\n");
+
+    // Clean up sprites
+    for (CHSprite* sprite : m_sprites) {
+        if (sprite) {
+            Sprite_Unload(&sprite);
+        }
+    }
+    m_sprites.clear();
+    printf("✓ Sprites cleaned up\n");
+
+    // Font cleanup is handled by unique_ptr destructor
+    if (m_debugFont) {
+        CHFont* font = m_debugFont.release();
+        Font_Release(&font);
+        printf("✓ Font cleaned up\n");
+    }
+
+    // Scene cleanup is handled by unique_ptr destructor  
+    if (m_testScene) {
+        CHScene* scene = m_testScene.release();
+        Scene_Unload(&scene);
+        printf("✓ Scene cleaned up\n");
+    }
+
+    // Camera cleanup is handled by unique_ptr destructor
+    if (m_camera) {
+        CHCamera* camera = m_camera.release();
+        Camera_Unload(&camera);
+        printf("✓ Camera cleaned up\n");
+    }
+
+    printf("✓ All test resources cleaned up\n");
+}
+
 // Window procedure
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
-{
-    switch (message)
-    {
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
 
     case WM_KEYDOWN:
-        switch (wParam)
-        {
-        case VK_ESCAPE:
-            PostQuitMessage(0);
-            return 0;
-
-        case VK_F1:
-            g_ShowInfo = !g_ShowInfo;
-            printf("Info display: %s\n", g_ShowInfo ? "ON" : "OFF");
-            return 0;
-
-        case VK_F2:
-            g_WireframeMode = !g_WireframeMode;
-            printf("Wireframe mode: %s\n", g_WireframeMode ? "ON" : "OFF");
-            return 0;
-
-        case VK_UP:
-            g_CameraAngleX += 0.05f;
-            if (g_CameraAngleX > 1.5f) g_CameraAngleX = 1.5f;
-            return 0;
-
-        case VK_DOWN:
-            g_CameraAngleX -= 0.05f;
-            if (g_CameraAngleX < -1.5f) g_CameraAngleX = -1.5f;
-            return 0;
-
-        case VK_LEFT:
-            g_CameraAngleY -= 0.05f;
-            return 0;
-
-        case VK_RIGHT:
-            g_CameraAngleY += 0.05f;
-            return 0;
-
-        case VK_ADD:
-        case VK_OEM_PLUS:
-            g_CameraDistance -= 1.0f;
-            if (g_CameraDistance < 2.0f) g_CameraDistance = 2.0f;
-            return 0;
-
-        case VK_SUBTRACT:
-        case VK_OEM_MINUS:
-            g_CameraDistance += 1.0f;
-            if (g_CameraDistance > 50.0f) g_CameraDistance = 50.0f;
-            return 0;
-
-        case 'R':
-        case 'r':
-            // Reset camera
-            g_CameraDistance = 15.0f;
-            g_CameraAngleX = 0.3f;
-            g_CameraAngleY = 0.0f;
-            printf("Camera reset\n");
-            return 0;
-
-        case 'P':
-            // Print current state
-            printf("\n=== Current State ===\n");
-            printf("Camera Distance: %.2f\n", g_CameraDistance);
-            printf("Camera Angle X: %.2f\n", g_CameraAngleX);
-            printf("Camera Angle Y: %.2f\n", g_CameraAngleY);
-            printf("Rotation Angle: %.2f\n", g_RotationAngle);
-            printf("Wireframe: %s\n", g_WireframeMode ? "ON" : "OFF");
-            if (g_TestScene)
-            {
-                printf("Scene: %d vertices, %d triangles\n",
-                    g_TestScene->dwVecCount, g_TestScene->dwTriCount);
-            }
-            printf("====================\n\n");
-            return 0;
-        }
+        g_Test.HandleInput(wParam);
         return 0;
 
-    case WM_MOUSEWHEEL:
-    {
+    case WM_MOUSEWHEEL: {
         int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-        if (delta > 0)
-            g_CameraDistance -= 1.0f;
-        else
-            g_CameraDistance += 1.0f;
-
-        if (g_CameraDistance < 2.0f) g_CameraDistance = 2.0f;
-        if (g_CameraDistance > 50.0f) g_CameraDistance = 50.0f;
+        // Delegate to test class mouse handling
+        if (delta > 0) {
+            g_Test.HandleInput(VK_ADD);
+        }
+        else {
+            g_Test.HandleInput(VK_SUBTRACT);
+        }
+        return 0;
     }
-    return 0;
+
+    case WM_SIZE:
+        // Handle window resize
+        if (wParam != SIZE_MINIMIZED) {
+            UINT width = LOWORD(lParam);
+            UINT height = HIWORD(lParam);
+            printf("Window resized to %dx%d\n", width, height);
+            // TODO: Implement proper resize handling
+        }
+        return 0;
     }
 
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
-{
-    printf("CH Engine 3D Test Starting...\n");
-    printf("==============================\n\n");
+// Console test mode for debugging without graphics
+void RunConsoleTests() {
+    printf("CH Engine Console Tests\n");
+    printf("=======================\n\n");
 
-    // Initialize the CH Engine with debug output
+    // Test math functions
+    printf("1. Testing math utilities...\n");
+    float rad90 = CHCameraMath::ToRadian(90.0f);
+    float rad180 = CHCameraMath::ToRadian(180.0f);
+    float deg90 = CHCameraMath::ToDegree(rad90);
+    printf("   90° = %.4f rad = %.4f°\n", rad90, deg90);
+    printf("   180° = %.4f rad\n", rad180);
+
+    // Test vector math
+    XMVECTOR v1 = XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f);
+    XMVECTOR v2 = XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f);
+    XMVECTOR cross = XMVector3Cross(v1, v2);
+    printf("   Cross product test: (1,0,0) x (0,1,0) = (%.1f,%.1f,%.1f)\n",
+        XMVectorGetX(cross), XMVectorGetY(cross), XMVectorGetZ(cross));
+
+    // Test random numbers
+    printf("\n2. Testing random number generator...\n");
+    std::vector<int> randoms;
+    for (int i = 0; i < 10; i++) {
+        randoms.push_back(Random(1, 100));
+    }
+    printf("   Random sequence: ");
+    for (int r : randoms) printf("%d ", r);
+    printf("\n");
+
+    // Test string functions
+    printf("\n3. Testing string utilities...\n");
+    char testStr1[] = "level1\\level2\\level3\\file.txt";
+    char testStr2[] = "level1\\level2\\level3\\file.txt";
+
+    CutString(testStr1, 2);
+    printf("   CutString(2): '%s'\n", testStr1);
+
+    CutString(testStr2, 1);
+    printf("   CutString(1): '%s'\n", testStr2);
+
+    // Test float comparison
+    printf("\n4. Testing float comparison...\n");
+    float f1 = 1.0f, f2 = 1.0001f, f3 = 1.1f;
+    printf("   FloatCmp(1.0, 1.0001, 0.001): %d\n", FloatCmp(f1, f2, 0.001f));
+    printf("   FloatCmp(1.0, 1.1, 0.001): %d\n", FloatCmp(f1, f3, 0.001f));
+
+    // Test data file hashing
+    printf("\n5. Testing data file system...\n");
+    DWORD hash1 = string_id("test.txt");
+    DWORD hash2 = string_id("TEST.TXT");
+    DWORD hash3 = string_id("different.txt");
+    printf("   Hash 'test.txt': 0x%08X\n", hash1);
+    printf("   Hash 'TEST.TXT': 0x%08X %s\n", hash2,
+        (hash1 == hash2) ? "(match)" : "(different)");
+    printf("   Hash 'different.txt': 0x%08X\n", hash3);
+
+    printf("\n✓ Console tests completed!\n\n");
+}
+
+// Engine capability demonstration
+void PrintEngineCapabilities() {
+    printf("CH Engine Capabilities\n");
+    printf("=====================\n\n");
+
+    printf("Graphics API: DirectX 11 with DirectX 8 compatibility\n");
+    printf("Target Platform: Windows Desktop\n");
+    printf("Feature Level: ");
+    switch (g_FeatureLevel) {
+    case D3D_FEATURE_LEVEL_11_1: printf("11.1\n"); break;
+    case D3D_FEATURE_LEVEL_11_0: printf("11.0\n"); break;
+    case D3D_FEATURE_LEVEL_10_1: printf("10.1\n"); break;
+    case D3D_FEATURE_LEVEL_10_0: printf("10.0\n"); break;
+    default: printf("Unknown\n"); break;
+    }
+
+    printf("\nCore Systems:\n");
+    printf("  ✓ 3D Scene Rendering (static geometry)\n");
+    printf("  ✓ Camera System (first-person controls)\n");
+    printf("  ✓ Texture Management (multiple formats)\n");
+    printf("  ✓ 2D Sprite Rendering\n");
+    printf("  ✓ Font Rendering (dynamic character caching)\n");
+    printf("  ✓ Skeletal Animation (CHPhy system)\n");
+    printf("  ✓ Particle Systems (CHPtcl)\n");
+    printf("  ✓ Vector Graphics (CHShape)\n");
+    printf("  ✓ Data File System (.WDF packs)\n");
+    printf("  ✓ Screen Capture (BMP/JPEG)\n");
+
+    printf("\nSupported Formats:\n");
+    printf("  Textures: BMP, DXT1/3/5, various RGB formats\n");
+    printf("  Data: Custom binary formats with versioning\n");
+    printf("  Animation: Keyframe-based with interpolation\n");
+
+    printf("\nBest Suited For:\n");
+    printf("  • Early 2000s style 3D games\n");
+    printf("  • Educational graphics programming\n");
+    printf("  • Rapid prototyping\n");
+    printf("  • Indie games with retro aesthetics\n");
+    printf("  • Porting DirectX 8 applications\n");
+
+    printf("\n");
+}
+
+// Main application entry point
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    printf("CH Engine Test Application\n");
+    printf("==========================\n\n");
+
+    // Check for console mode
+    if (lpCmdLine && strstr(lpCmdLine, "-console")) {
+        AllocConsole();
+        freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+        RunConsoleTests();
+        printf("Press Enter to continue to graphics test...");
+        getchar();
+    }
+
+    // Print engine info
+    PrintEngineCapabilities();
+
+    // Initialize DirectX 11
     printf("Initializing DirectX 11...\n");
-    int result = Init3D(hInstance, "CH Engine 3D Test", 1280, 720, TRUE, WindowProc, 2);
+    int initResult = Init3D(hInstance, "CH Engine Test", 1280, 720, TRUE, WindowProc, 2);
 
-    switch (result)
-    {
+    switch (initResult) {
     case 1:
         printf("✓ DirectX 11 initialized successfully\n");
         break;
@@ -387,584 +894,74 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         MessageBoxA(NULL, "16-bit color mode not supported!", "Error", MB_OK);
         return -1;
     default:
-        printf("✗ Unknown initialization error (%d)\n", result);
+        printf("✗ Unknown initialization error (%d)\n", initResult);
         return -1;
     }
 
-    // Print graphics info
-    printf("\nGraphics Information:\n");
-    printf("Feature Level: ");
-    switch (g_FeatureLevel)
-    {
-    case D3D_FEATURE_LEVEL_11_1: printf("11.1\n"); break;
-    case D3D_FEATURE_LEVEL_11_0: printf("11.0\n"); break;
-    case D3D_FEATURE_LEVEL_10_1: printf("10.1\n"); break;
-    case D3D_FEATURE_LEVEL_10_0: printf("10.0\n"); break;
-    default: printf("Unknown\n"); break;
-    }
-    printf("Resolution: %dx%d\n", g_DisplayMode.Width, g_DisplayMode.Height);
-    printf("Format: %d\n", g_DisplayMode.Format);
-
-    // Create test content
-    printf("\nCreating test content...\n");
-
-    if (!CreateTestCube(&g_TestScene))
-    {
-        printf("✗ Failed to create test cube\n");
+    // Initialize test framework
+    if (!g_Test.Initialize(g_hWnd)) {
+        printf("✗ Test initialization failed\n");
         Quit3D();
         return -1;
     }
-
-    if (!CreateTestCamera(&g_TestCamera))
-    {
-        printf("✗ Failed to create test camera\n");
-        Quit3D();
-        return -1;
-    }
-
-    CreateInfoSprite(); // Non-critical
 
     // Print controls
     printf("\nControls:\n");
-    printf("- Arrow keys: Rotate camera\n");
-    printf("- +/- keys or mouse wheel: Zoom in/out\n");
-    printf("- R key: Reset camera\n");
-    printf("- P key: Print current state\n");
-    printf("- F1 key: Toggle info display\n");
-    printf("- F2 key: Toggle wireframe mode\n");
-    printf("- ESC key: Exit\n");
+    printf("  Arrow Keys    - Rotate camera\n");
+    printf("  +/- or Wheel  - Zoom in/out\n");
+    printf("  R             - Reset camera\n");
+    printf("  P             - Print state info\n");
+    printf("  T             - Run validation tests\n");
+    printf("  F1            - Toggle debug info\n");
+    printf("  F2            - Toggle wireframe\n");
+    printf("  ESC           - Exit\n");
     printf("\nStarting render loop...\n\n");
-
-    // Initialize timing
-    g_LastTime = GetTickCount();
 
     // Main rendering loop
     MSG msg = {};
-    DWORD frameCount = 0;
-    DWORD lastFPSUpdate = GetTickCount();
-    DWORD currentFPS = 0;
-    bool firstFrame = true;
+    DWORD lastTime = static_cast<DWORD>(GetTickCount64());
 
-    while (msg.message != WM_QUIT)
-    {
-        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-        {
+    while (msg.message != WM_QUIT) {
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        else
-        {
-            // Limit frame rate to ~60 FPS
-            if (LimitRate(16))
-            {
-                DWORD currentTime = GetTickCount();
-                float deltaTime = (currentTime - g_LastTime) / 1000.0f;
-                g_LastTime = currentTime;
+        else {
+            // Frame rate limiting (~60 FPS)
+            if (LimitRate(16)) {
+                DWORD currentTime = static_cast<DWORD>(GetTickCount64());
+                float deltaTime = (currentTime - lastTime) / 1000.0f;
+                lastTime = currentTime;
 
-                // Update rotation
-                g_RotationAngle += deltaTime * 0.5f; // Slow rotation
+                // Update and render
+                g_Test.Update(deltaTime);
+                g_Test.Render();
 
-                // Update camera
-                UpdateCamera();
-
-                // Begin rendering
-                if (Begin3D())
-                {
-                    // Clear buffers
-                    ClearBuffer(TRUE, TRUE, 0xFF001122); // Dark blue-red background
-
-                    // Build and set camera matrices
-                    if (g_TestCamera)
-                    {
-                        Camera_BuildView(g_TestCamera, TRUE);
-                        Camera_BuildProject(g_TestCamera, TRUE);
-
-                        if (firstFrame)
-                        {
-                            printf("✓ Camera matrices built\n");
-                            firstFrame = false;
-                        }
+                // Check for device issues
+                if (IfDeviceLost()) {
+                    printf("Device lost detected, attempting reset...\n");
+                    if (ResetDevice()) {
+                        printf("✓ Device reset successful\n");
                     }
-
-                    // Set wireframe mode if enabled
-                    if (g_WireframeMode)
-                    {
-                        // Note: You'll need to implement wireframe in your render state manager
-                        // SetRenderState(CH_RS_FILLMODE, CH_FILL_WIREFRAME);
+                    else {
+                        printf("✗ Device reset failed\n");
+                        break;
                     }
-
-                    // Draw the test scene
-                    if (g_TestScene)
-                    {
-                        // Apply rotation transform
-                        XMMATRIX rotationMatrix = XMMatrixRotationY(g_RotationAngle);
-                        Scene_Muliply(g_TestScene, &rotationMatrix);
-
-                        // Prepare and draw scene
-                        Scene_Prepare();
-                        if (!Scene_Draw(g_TestScene))
-                        {
-                            if (firstFrame)
-                                printf("Warning: Scene_Draw returned FALSE\n");
-                        }
-                    }
-
-                    // Draw 2D overlay
-                    RenderDebugInfo();
-
-                    // End rendering
-                    End3D();
-
-                    // Present the frame
-                    if (!Flip())
-                    {
-                        printf("Warning: Flip() failed\n");
-                    }
-                }
-                else
-                {
-                    printf("Warning: Begin3D() failed\n");
-                }
-
-                // Calculate FPS
-                frameCount++;
-                if (currentTime - lastFPSUpdate >= 1000) // Update every second
-                {
-                    currentFPS = frameCount;
-                    frameCount = 0;
-                    lastFPSUpdate = currentTime;
-
-                    // Update window title
-                    char titleText[256];
-                    sprintf_s(titleText, "CH Engine 3D Test - FPS: %d | Dist: %.1f | Wireframe: %s",
-                        currentFPS, g_CameraDistance, g_WireframeMode ? "ON" : "OFF");
-                    SetWindowTextA(g_hWnd, titleText);
-                }
-
-                // Check for device lost (compatibility)
-                if (IfDeviceLost())
-                {
-                    printf("Device lost detected, resetting...\n");
-                    ResetDevice();
                 }
             }
         }
     }
 
     // Cleanup
-    printf("\nCleaning up...\n");
-
-    if (g_InfoSprite)
-    {
-        Sprite_Unload(&g_InfoSprite);
-        printf("✓ Info sprite cleaned up\n");
-    }
-
-    if (g_TestScene)
-    {
-        Scene_Unload(&g_TestScene);
-        printf("✓ Test scene cleaned up\n");
-    }
-
-    if (g_TestCamera)
-    {
-        Camera_Unload(&g_TestCamera);
-        printf("✓ Test camera cleaned up\n");
-    }
-
-    // Shutdown the engine
+    printf("\nShutting down...\n");
+    g_Test.Cleanup();
     Quit3D();
-    printf("✓ CH Engine shutdown complete\n");
+    printf("✓ CH Engine Test completed\n");
 
     return static_cast<int>(msg.wParam);
 }
 
-// Console test mode (for debugging without graphics)
-void RunConsoleTests()
-{
-    printf("CH Engine Console Tests\n");
-    printf("=======================\n\n");
-
-    // Test math functions
-    printf("Testing math utilities...\n");
-    float radians = CHCameraMath::ToRadian(90.0f);
-    float degrees = CHCameraMath::ToDegree(radians);
-    printf("✓ 90° = %.4f rad = %.4f°\n", radians, degrees);
-
-    // Test random numbers
-    printf("\nTesting random number generator...\n");
-    for (int i = 0; i < 5; i++)
-    {
-        int rand = Random(1, 100);
-        printf("✓ Random %d: %d\n", i + 1, rand);
-    }
-
-    // Test string functions
-    printf("\nTesting string utilities...\n");
-    char testString[] = "level1\\level2\\level3\\file.txt";
-    char original[256];
-    strcpy_s(original, testString);
-
-    CutString(testString, 2);
-    printf("✓ CutString('%s', 2) = '%s'\n", original, testString);
-
-    // Test data file hash
-    printf("\nTesting data file hashing...\n");
-    DWORD hash1 = string_id("test.txt");
-    DWORD hash2 = string_id("TEST.TXT");
-    printf("✓ Hash 'test.txt': 0x%08X\n", hash1);
-    printf("✓ Hash 'TEST.TXT': 0x%08X (should match)\n", hash2);
-
-    if (hash1 == hash2)
-        printf("✓ Case-insensitive hashing works\n");
-    else
-        printf("✗ Case-insensitive hashing failed\n");
-
-    printf("\nConsole tests complete!\n");
-}
-
-// Alternative entry point for console testing
-int main()
-{
-    // Check command line arguments
-    if (GetCommandLineA() && strstr(GetCommandLineA(), "-console"))
-    {
-        RunConsoleTests();
-        printf("\nPress Enter to continue to graphics test...");
-        getchar();
-    }
-
+// Alternative console entry point
+int main() {
     return WinMain(GetModuleHandle(NULL), NULL, GetCommandLineA(), SW_SHOW);
-}
-
-// Debugging utilities
-void PrintDirectXInfo()
-{
-    printf("\nDirectX 11 Status:\n");
-    printf("Device: %s\n", g_D3DDevice ? "Valid" : "NULL");
-    printf("Context: %s\n", g_D3DContext ? "Valid" : "NULL");
-    printf("SwapChain: %s\n", g_SwapChain ? "Valid" : "NULL");
-    printf("RenderTarget: %s\n", g_RenderTargetView ? "Valid" : "NULL");
-    printf("DepthStencil: %s\n", g_DepthStencilView ? "Valid" : "NULL");
-}
-
-void ValidateRenderingPipeline()
-{
-    printf("\nValidating rendering pipeline...\n");
-
-    // Check if critical objects exist
-    bool valid = true;
-
-    if (!g_D3DDevice)
-    {
-        printf("✗ D3D Device is NULL\n");
-        valid = false;
-    }
-
-    if (!g_D3DContext)
-    {
-        printf("✗ D3D Context is NULL\n");
-        valid = false;
-    }
-
-    if (!g_SwapChain)
-    {
-        printf("✗ Swap Chain is NULL\n");
-        valid = false;
-    }
-
-    if (!g_RenderTargetView)
-    {
-        printf("✗ Render Target View is NULL\n");
-        valid = false;
-    }
-
-    if (!g_DepthStencilView)
-    {
-        printf("✗ Depth Stencil View is NULL\n");
-        valid = false;
-    }
-
-    if (valid)
-    {
-        printf("✓ All critical DirectX objects are valid\n");
-
-        // Test basic operations
-        printf("Testing basic operations...\n");
-
-        // Test clear
-        float clearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
-        g_D3DContext->ClearRenderTargetView(g_RenderTargetView.Get(), clearColor);
-        g_D3DContext->ClearDepthStencilView(g_DepthStencilView.Get(),
-            D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL,
-            1.0f, 0);
-        printf("✓ Clear operations successful\n");
-
-        // Test present
-        HRESULT hr = g_SwapChain->Present(0, 0);
-        if (SUCCEEDED(hr))
-        {
-            printf("✓ Present operation successful\n");
-        }
-        else
-        {
-            printf("✗ Present operation failed (HRESULT: 0x%08X)\n", hr);
-        }
-    }
-    else
-    {
-        printf("✗ Rendering pipeline validation failed\n");
-    }
-}
-
-// Error checking wrapper for debugging
-#define CHECK_HRESULT(expr, desc) \
-    do { \
-        HRESULT hr = (expr); \
-        if (FAILED(hr)) { \
-            printf("✗ %s failed with HRESULT 0x%08X\n", desc, hr); \
-            return false; \
-        } else { \
-            printf("✓ %s succeeded\n", desc); \
-        } \
-    } while(0)
-
-// Enhanced scene creation with error checking
-bool CreateTestCubeAdvanced(CHScene** scene)
-{
-    printf("Creating advanced test cube...\n");
-
-    *scene = new CHScene;
-    Scene_Clear(*scene);
-
-    // Set scene name
-    const char* sceneName = "Advanced Test Cube";
-    size_t nameLen = strlen(sceneName) + 1;
-    (*scene)->lpName = new char[nameLen];
-    strcpy_s((*scene)->lpName, nameLen, sceneName);
-
-    // Create more detailed cube with better normals and UVs
-    (*scene)->dwVecCount = 24; // 4 vertices per face, 6 faces
-    (*scene)->lpVB = new CHSceneVertex[24];
-
-    float size = 2.0f;
-    int vertIndex = 0;
-
-    // Front face (Z+) - Red tinted UVs
-    (*scene)->lpVB[vertIndex++] = { -size, -size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[vertIndex++] = { size, -size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[vertIndex++] = { size,  size,  size,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[vertIndex++] = { -size,  size,  size,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    // Continue with other faces...
-    // (Previous cube creation code continues here)
-
-    // Create indices with proper winding
-    (*scene)->dwTriCount = 12;
-    (*scene)->lpIB = new WORD[36];
-
-    // Define indices with consistent counter-clockwise winding
-    WORD indices[] = {
-        // Front
-        0, 1, 2,  0, 2, 3,
-        // Back  
-        4, 5, 6,  4, 6, 7,
-        // Left
-        8, 9, 10,  8, 10, 11,
-        // Right
-        12, 13, 14,  12, 14, 15,
-        // Top
-        16, 17, 18,  16, 18, 19,
-        // Bottom
-        20, 21, 22,  20, 22, 23
-    };
-
-    memcpy((*scene)->lpIB, indices, sizeof(indices));
-
-    // Create and validate texture
-    printf("Creating procedural texture...\n");
-    if (!CreateProceduralTexture(&g_TestTexture))
-    {
-        printf("✗ Failed to create procedural texture\n");
-        (*scene)->nTex = -1;
-        return false;
-    }
-
-    // Use texture ID 0 for now since we're not managing in global array
-    (*scene)->nTex = 0;
-    printf("✓ Texture assigned to scene\n");
-
-    // Create DirectX 11 buffers with error checking
-    printf("Creating DirectX 11 vertex buffer...\n");
-    if (FAILED(CHSceneInternal::CreateVertexBuffer(*scene)))
-    {
-        printf("✗ Vertex buffer creation failed\n");
-        Scene_Unload(scene);
-        return false;
-    }
-
-    printf("Creating DirectX 11 index buffer...\n");
-    if (FAILED(CHSceneInternal::CreateIndexBuffer(*scene)))
-    {
-        printf("✗ Index buffer creation failed\n");
-        Scene_Unload(scene);
-        return false;
-    }
-
-    printf("✓ Advanced test cube created successfully\n");
-    printf("  Vertices: %d, Triangles: %d, Texture: %d\n",
-        (*scene)->dwVecCount, (*scene)->dwTriCount, (*scene)->nTex);
-
-    return true;
-}
-
-// Test multiple primitives
-bool CreateTestPrimitives(CHScene** scene)
-{
-    printf("Creating test primitives collection...\n");
-
-    *scene = new CHScene;
-    Scene_Clear(*scene);
-
-    // Create a more complex scene with multiple objects
-    // This would include planes, spheres, etc. arranged in a test pattern
-
-    (*scene)->dwVecCount = 8; // Simple quad for now
-    (*scene)->lpVB = new CHSceneVertex[8];
-
-    // Ground plane
-    float groundSize = 5.0f;
-    (*scene)->lpVB[0] = { -groundSize, -2.0f, -groundSize,  0.0f,  1.0f,  0.0f, 0.0f, 2.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[1] = { groundSize, -2.0f, -groundSize,  0.0f,  1.0f,  0.0f, 2.0f, 2.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[2] = { groundSize, -2.0f,  groundSize,  0.0f,  1.0f,  0.0f, 2.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[3] = { -groundSize, -2.0f,  groundSize,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    // Wall plane
-    (*scene)->lpVB[4] = { -groundSize, -2.0f, -groundSize,  0.0f,  0.0f,  1.0f, 0.0f, 2.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[5] = { groundSize, -2.0f, -groundSize,  0.0f,  0.0f,  1.0f, 2.0f, 2.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[6] = { groundSize,  2.0f, -groundSize,  0.0f,  0.0f,  1.0f, 2.0f, 0.0f, 0.0f, 0.0f };
-    (*scene)->lpVB[7] = { -groundSize,  2.0f, -groundSize,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    // Create indices for 2 quads (4 triangles)
-    (*scene)->dwTriCount = 4;
-    (*scene)->lpIB = new WORD[12];
-
-    // Ground quad
-    (*scene)->lpIB[0] = 0; (*scene)->lpIB[1] = 1; (*scene)->lpIB[2] = 2;
-    (*scene)->lpIB[3] = 0; (*scene)->lpIB[4] = 2; (*scene)->lpIB[5] = 3;
-
-    // Wall quad  
-    (*scene)->lpIB[6] = 4; (*scene)->lpIB[7] = 5; (*scene)->lpIB[8] = 6;
-    (*scene)->lpIB[9] = 4; (*scene)->lpIB[10] = 6; (*scene)->lpIB[11] = 7;
-
-    // Use texture ID 0 for now since we're not managing in global array
-    (*scene)->nTex = g_TestTexture ? 0 : -1;
-
-    // Create buffers
-    if (FAILED(CHSceneInternal::CreateVertexBuffer(*scene)) ||
-        FAILED(CHSceneInternal::CreateIndexBuffer(*scene)))
-    {
-        printf("✗ Buffer creation failed for test primitives\n");
-        Scene_Unload(scene);
-        return false;
-    }
-
-    printf("✓ Test primitives created\n");
-    return true;
-}
-
-// Comprehensive engine validation
-bool ValidateEngine()
-{
-    printf("\n=== CH Engine Validation ===\n");
-
-    bool allValid = true;
-
-    // Test DirectX objects
-    if (!g_D3DDevice) { printf("✗ D3D Device missing\n"); allValid = false; }
-    else { printf("✓ D3D Device valid\n"); }
-
-    if (!g_D3DContext) { printf("✗ D3D Context missing\n"); allValid = false; }
-    else { printf("✓ D3D Context valid\n"); }
-
-    if (!g_SwapChain) { printf("✗ Swap Chain missing\n"); allValid = false; }
-    else { printf("✓ Swap Chain valid\n"); }
-
-    if (!g_RenderTargetView) { printf("✗ Render Target missing\n"); allValid = false; }
-    else { printf("✓ Render Target valid\n"); }
-
-    if (!g_DepthStencilView) { printf("✗ Depth Stencil missing\n"); allValid = false; }
-    else { printf("✓ Depth Stencil valid\n"); }
-
-    // Test shader managers
-    printf("\nTesting shader managers...\n");
-
-    // Test scene rendering setup
-    if (g_TestScene)
-    {
-        printf("Testing scene preparation...\n");
-        Scene_Prepare();
-        printf("✓ Scene_Prepare() completed\n");
-
-        // Test matrix operations
-        XMMATRIX testMatrix = XMMatrixIdentity();
-        Scene_Muliply(g_TestScene, &testMatrix);
-        printf("✓ Scene matrix operations work\n");
-    }
-
-    // Test camera operations
-    if (g_TestCamera)
-    {
-        printf("Testing camera operations...\n");
-        if (Camera_BuildView(g_TestCamera, FALSE))
-            printf("✓ Camera view matrix build successful\n");
-        else
-            printf("✗ Camera view matrix build failed\n");
-
-        if (Camera_BuildProject(g_TestCamera, FALSE))
-            printf("✓ Camera projection matrix build successful\n");
-        else
-            printf("✗ Camera projection matrix build failed\n");
-    }
-
-    // Test render states
-    printf("Testing render state system...\n");
-    SetRenderState(CH_RS_CULLMODE, CH_CULL_CW);
-    SetRenderState(CH_RS_ZENABLE, TRUE);
-    SetTextureStageState(0, CH_TSS_MINFILTER, CH_TEXF_LINEAR);
-    printf("✓ Render state operations completed\n");
-
-    if (allValid)
-    {
-        printf("\n✓ Engine validation PASSED\n");
-    }
-    else
-    {
-        printf("\n✗ Engine validation FAILED\n");
-    }
-
-    printf("=============================\n\n");
-    return allValid;
-}
-
-// Create a simple test scene (cube) for debugging
-CHScene* CreateTestScene()
-{
-    // Instead of creating a scene programmatically, let's try to load the existing test.scene file
-    // with better error handling and fallback
-    CHScene* scene = nullptr;
-    
-    printf("Attempting to load test.scene file...\n");
-    if (Scene_Load(&scene, "test.scene", 0))
-    {
-        printf("✓ Successfully loaded test.scene file\n");
-        return scene;
-    }
-    else
-    {
-        printf("✗ Failed to load test.scene file\n");
-        printf("  This is expected if the file doesn't exist or is invalid\n");
-        printf("  The application will run without a 3D scene\n");
-        return nullptr;
-    }
 }

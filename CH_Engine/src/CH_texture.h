@@ -101,6 +101,9 @@ BOOL Texture_Create(CHTexture** lpTex,
 extern CH_CORE_DLL_API DWORD g_dwTexCount;
 extern CH_CORE_DLL_API CHTexture* g_lpTex[TEX_MAX];
 
+// Export the CreateTextureFromPixels function for external use
+CH_CORE_DLL_API BOOL CreateTextureFromPixels(const DWORD* pixels, UINT width, UINT height, CHTexture* texture);
+
 // Modern C++ helper functions (internal use)
 namespace CHTextureInternal {
     // Format conversion utilities
@@ -111,7 +114,7 @@ namespace CHTextureInternal {
     BOOL CreateTextureFromMemory(const void* pData, size_t dataSize,
         CHTexture* texture, DWORD mipLevels,
         DWORD colorKey);
-    BOOL CreateTextureFromPixels(const DWORD* pixels, UINT width, UINT height, CHTexture* texture);
+
 
     BOOL CreateDefaultTexture(UINT width, UINT height, CHTexture* texture);
 

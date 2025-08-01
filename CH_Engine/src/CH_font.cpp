@@ -1,16 +1,7 @@
 #include "CH_font.h"
 #include "CH_main.h"
 
-// Font size adjustment function (from original)
-int GetFontRealSize(int nSize)
-{
-    if (nSize <= 9) return 9;
-    if (nSize <= 12) return 12;
-    if (nSize <= 16) return 16;
-    if (nSize <= 20) return 20;
-    if (nSize <= 24) return 24;
-    return nSize;
-}
+// Font size adjustment function (from original) - moved to namespace
 
 void Char_Clear(CHChar* lpChar)
 {
@@ -77,12 +68,17 @@ void Font_Clear(CHFont* lpFont)
     lpFont->dwChars = 0;
 }
 
-BOOL Font_Create(CHFont** lpFont, char* lpFontName, int nSize)
+BOOL Font_Create(CHFont** lpFont, const char* lpFontName, int nSize)
 {
     if (!lpFont || !lpFontName)
         return FALSE;
     
     *lpFont = new CHFont;
+    
+    // Initialize the font structure to zero before clearing
+    ZeroMemory(*lpFont, sizeof(CHFont));
+    
+    // Now it's safe to call Font_Clear
     Font_Clear(*lpFont);
     
     // Store font information
@@ -257,7 +253,7 @@ BOOL CreateCharacterTexture(CHFont* font, CHChar* character, char ch)
     RECT rect = { 0, 0, font->nRealSize, font->nRealSize };
     FillRect(font->hDC, &rect, (HBRUSH)GetStockObject(BLACK_BRUSH));
     
-    // Draw character
+    // Draw character using Windows GDI
     char charStr[2] = { ch, '\0' };
     TextOutA(font->hDC, 0, 0, charStr, 1);
     
@@ -285,8 +281,19 @@ BOOL CreateCharacterTexture(CHFont* font, CHChar* character, char ch)
             pixels[i] = (intensity << 24) | 0x00FFFFFF; // Set alpha, white color
         }
         
-        // Update texture with processed data (placeholder - would need proper texture update)
-        // In a full implementation, we'd use UpdateTexture or staging buffers
+        // Update texture with processed data using DirectX 11
+        D3D11_MAPPED_SUBRESOURCE mappedResource;
+        HRESULT hr = g_D3DContext->Map((*charTexture)->lpTex.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+        if (SUCCEEDED(hr)) {
+            // Copy pixel data
+            DWORD* destPixels = static_cast<DWORD*>(mappedResource.pData);
+            for (UINT y = 0; y < font->nRealSize; y++) {
+                memcpy(destPixels + y * (mappedResource.RowPitch / 4), 
+                       pixels + y * font->nRealSize, 
+                       font->nRealSize * sizeof(DWORD));
+            }
+            g_D3DContext->Unmap((*charTexture)->lpTex.Get(), 0);
+        }
         
         return TRUE;
     }
@@ -302,7 +309,7 @@ void CacheCharacter(CHFont* font, char ch)
     CHChar* newChar = new CHChar;
     Char_Clear(newChar);
     newChar->Char[0] = ch;
-    newChar->dwTime = GetTickCount();
+    newChar->dwTime = static_cast<DWORD>(GetTickCount64());
     
     if (CreateCharacterTexture(font, newChar, ch))
     {
@@ -323,7 +330,7 @@ CHChar* GetCachedCharacter(CHFont* font, char ch)
     CHChar* cachedChar = font->lpChar[ch][0];
     if (cachedChar)
     {
-        cachedChar->dwTime = GetTickCount(); // Update access time
+        cachedChar->dwTime = static_cast<DWORD>(GetTickCount64()); // Update access time
     }
     
     return cachedChar;
@@ -376,7 +383,12 @@ BOOL RenderTextQuad(CHFontVertex* vertices, CHTexture* texture)
 
 int GetFontRealSize(int requestedSize)
 {
-    return GetFontRealSize(requestedSize);
+    if (requestedSize <= 9) return 9;
+    if (requestedSize <= 12) return 12;
+    if (requestedSize <= 16) return 16;
+    if (requestedSize <= 20) return 20;
+    if (requestedSize <= 24) return 24;
+    return requestedSize;
 }
 
 void MeasureText(CHFont* font, const char* text, int* width, int* height)

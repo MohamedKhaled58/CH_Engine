@@ -48,7 +48,7 @@ CH_CORE_DLL_API
 void Font_Clear(CHFont* lpFont);
 
 CH_CORE_DLL_API
-BOOL Font_Create(CHFont** lpFont, char* lpFontName, int nSize);
+BOOL Font_Create(CHFont** lpFont, const char* lpFontName, int nSize);
 
 CH_CORE_DLL_API
 void Font_Release(CHFont** lpFont);
