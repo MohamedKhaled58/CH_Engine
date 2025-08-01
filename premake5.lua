@@ -1,127 +1,161 @@
--- CH Engine - DirectX 11 Modern C++ Engine
--- Premake5 Configuration
-
 workspace "CHEngine"
-    configurations { "Debug", "Release", "Debug_Static", "Release_Static" }
-    platforms { "x64" }
-    
-    startproject "CHEngine"
-    
-    -- Global settings
-    filter "configurations:Debug*"
-        defines { "DEBUG", "_DEBUG" }
-        symbols "On"
-        runtime "Debug"
-        
-    filter "configurations:Release*"
-        defines { "NDEBUG" }
-        optimize "On"
-        runtime "Release"
-        
-    filter "configurations:*_Static"
-        kind "StaticLib"
-        defines { "CH_CORE_DLL_EXPORTS" }
-        
-    filter "configurations:Debug"
-        kind "SharedLib"
-        defines { "CH_CORE_DLL_EXPORTS" }
-        
-    filter "configurations:Release"
-        kind "SharedLib"
-        defines { "CH_CORE_DLL_EXPORTS" }
-        
-    filter "platforms:x64"
-        architecture "x64"
-        
-    -- Output directories
-    filter "configurations:Debug*"
-        targetdir "bin/Debug"
-        objdir "bin-int/Debug"
-        
-    filter "configurations:Release*"
-        targetdir "bin/Release"
-        objdir "bin-int/Release"
+	architecture "x64"
+	startproject "CHEngine"
 
--- Main Engine Project
+	configurations
+	{
+		"Debug",
+		"Release",
+		"Dist"
+	}
+	
+	flags
+	{
+		"MultiProcessorCompile"
+	}
+
+outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
+
+-- Include directories relative to root folder (solution directory)
+IncludeDir = {}
+IncludeDir["DirectXMath"] = "vendor/DirectXMath/Inc"
+IncludeDir["spdlog"] = "vendor/spdlog/include"
+IncludeDir["glm"] = "vendor/glm"
+IncludeDir["stb"] = "vendor/stb"
+
+group "Dependencies"
+	-- Add any vendor dependencies here if needed
+
+group ""
+
 project "CHEngine"
-    language "C++"
-    cppdialect "C++20"
-    staticruntime "Off"
-    
-    -- Source files
-    files {
-        "CH_Engine/*.h",
-        "CH_Engine/*.cpp"
-    }
-    
-    -- Include directories
-    includedirs {
-        "CH_Engine",
-        "vendor/DirectXMath/include",
-        "vendor/spdlog/include",
-        "vendor/glm",
-        "vendor/stb"
-    }
-    
-    -- Preprocessor definitions
-    defines {
-        "WIN32_LEAN_AND_MEAN",
-        "NOMINMAX",
-        "UNICODE",
-        "_UNICODE",
-        "_WIN32_WINNT=0x0601", -- Windows 7+
-        "CH_CORE_DLL_EXPORTS"
-    }
-    
-    -- Compiler flags
-    filter "configurations:Debug*"
-        defines { "DEBUG", "_DEBUG" }
-        
-    filter "configurations:Release*"
-        defines { "NDEBUG" }
-        
-    -- Platform-specific settings
+	location "CH_Engine"
+	kind "SharedLib"
+	language "C++"
+	cppdialect "C++20"
+	staticruntime "on"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"%{prj.name}/src/**.h",
+		"%{prj.name}/src/**.cpp"
+	}
+
+	defines
+	{
+		"_CRT_SECURE_NO_WARNINGS",
+		"WIN32_LEAN_AND_MEAN",
+		"NOMINMAX",
+		"_WIN32_WINNT=0x0601",
+		"CH_CORE_DLL_EXPORTS"
+	}
+
+	includedirs
+	{
+		"%{prj.name}",
+		"%{IncludeDir.DirectXMath}",
+		"%{IncludeDir.spdlog}",
+		"%{IncludeDir.glm}",
+		"%{IncludeDir.stb}"
+	}
+
+	links 
+	{ 
+		"d3d11.lib",
+		"dxgi.lib",
+		"d3dcompiler.lib",
+		"dinput8.lib",
+		"dxguid.lib",
+		"xinput.lib",
+		"winmm.lib",
+		"gdi32.lib",
+		"user32.lib",
+		"kernel32.lib",
+		"shell32.lib",
+		"ole32.lib",
+		"uuid.lib",
+		"comdlg32.lib",
+		"advapi32.lib"
+	}
+
+    -- Windows-specific settings
     filter "system:windows"
         systemversion "latest"
-        
-    -- DirectX 11 dependencies
+        buildoptions { "/utf-8" }
+
+		defines
+		{
+			"CH_PLATFORM_WINDOWS"
+		}
+
+	filter "configurations:Debug"
+		defines "CH_DEBUG"
+		runtime "Debug"
+		symbols "on"
+
+	filter "configurations:Release"
+		defines "CH_RELEASE"
+		runtime "Release"
+		optimize "on"
+
+	filter "configurations:Dist"
+		defines "CH_DIST"
+		runtime "Release"
+		optimize "on"
+
+-------------------------------------------------
+project "TestCHEngine"
+	location "TestCHEngine"
+	kind "ConsoleApp"
+	language "C++"
+	cppdialect "C++20"
+	staticruntime "on"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"%{prj.name}/src/**.h",
+		"%{prj.name}/src/**.cpp"
+	}
+
+	includedirs
+	{
+		"CH_Engine",
+		"%{IncludeDir.spdlog}",
+		"%{IncludeDir.glm}"
+	}
+
+	links
+	{
+		"CHEngine"
+	}
+
+    -- Windows-specific settings
     filter "system:windows"
-        links {
-            "d3d11.lib",
-            "dxgi.lib", 
-            "d3dcompiler.lib",
-            "d3dx11.lib",
-            "d3dx9.lib",
-            "dinput8.lib",
-            "dxguid.lib",
-            "xinput.lib",
-            "winmm.lib",
-            "gdi32.lib",
-            "user32.lib",
-            "kernel32.lib",
-            "shell32.lib",
-            "ole32.lib",
-            "uuid.lib",
-            "comdlg32.lib",
-            "advapi32.lib"
-        }
-        
-    -- Warnings and optimizations
-    filter "configurations:Debug*"
-        flags { "MultiProcessorCompile" }
-        
-    filter "configurations:Release*"
-        flags { "MultiProcessorCompile", "LinkTimeOptimization" }
-        
-    -- Character set
-    characterset "Unicode"
-    
-    -- Exception handling
-    exceptionhandling "On"
-    
-    -- Runtime library
-    filter "configurations:Debug*"
-        runtime "Debug"
-        
-    filter "configurations:Release*"
-        runtime "Release"
+        systemversion "latest"
+        buildoptions { "/utf-8" }
+
+		defines
+		{
+			"CH_PLATFORM_WINDOWS"
+		}
+
+	filter "configurations:Debug"
+		defines "CH_DEBUG"
+		runtime "Debug"
+		symbols "on"
+
+	filter "configurations:Release"
+		defines "CH_RELEASE"
+		runtime "Release"
+		optimize "on"
+
+	filter "configurations:Dist"
+		defines "CH_DIST"
+		runtime "Release"
+		optimize "on" 
